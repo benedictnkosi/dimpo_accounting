@@ -1,0 +1,872 @@
+{
+  "topics": [
+    {
+      "id": "financial_statements",
+      "name": "Financial Statements",
+      "subtopics": [
+        {
+          "id": "income_statement",
+          "name": "Statement of Comprehensive Income",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "balance_sheet",
+          "name": "Statement of Financial Position",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "adjustments",
+          "name": "Adjustments for Accruals, Prepayments, Depreciation",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "bad_debts",
+          "name": "Bad Debts and Provisions",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "inventory",
+          "name": "Inventory Valuation and Adjustments",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "depreciation",
+          "name": "Depreciation Methods",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "disposal",
+          "name": "Disposal of Assets",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cash_flow_equity",
+      "name": "Cash Flow & Equity",
+      "subtopics": [
+        {
+          "id": "cash_flow_statement",
+          "name": "Cash Flow Statement",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "cash_flow_classification",
+          "name": "Cash Flow Classifications",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "dividends",
+          "name": "Dividends Paid and Declared",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "retained_income",
+          "name": "Retained Income Statement",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "share_transactions",
+          "name": "Share Issue and Repurchase",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "ratio_analysis",
+      "name": "Ratio Analysis & Interpretation",
+      "subtopics": [
+        {
+          "id": "profitability_ratios",
+          "name": "Profitability Ratios",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "liquidity_ratios",
+          "name": "Liquidity Ratios",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "solvency_ratios",
+          "name": "Solvency and Gearing Ratios",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "efficiency_ratios",
+          "name": "Efficiency Ratios",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "ratio_trends",
+          "name": "Interpretation of Ratio Trends",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "company_comparison",
+          "name": "Company Performance Comparison",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "cost_control",
+      "name": "Cost Concepts & Internal Control",
+      "subtopics": [
+        {
+          "id": "markup_margin",
+          "name": "Mark-up and Margin",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "inventory_systems",
+          "name": "Periodic vs Perpetual Inventory",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "bank_control",
+          "name": "Bank Reconciliation and Petty Cash",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "internal_controls",
+          "name": "Internal Control Principles",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "governance_ethics",
+      "name": "Corporate Governance & Ethics",
+      "subtopics": [
+        {
+          "id": "directors_role",
+          "name": "Role of Directors and the Board",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "auditor_duties",
+          "name": "Duties and Independence of Auditors",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "audit_opinions",
+          "name": "Types of Audit Opinions",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "stakeholders",
+          "name": "Stakeholder Interests",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "ethics_reporting",
+          "name": "Ethical Financial Reporting",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "capital_shareholders",
+      "name": "Company Capital & Shareholders",
+      "subtopics": [
+        {
+          "id": "share_types",
+          "name": "Types of Shares",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "share_valuation",
+          "name": "Issue of Shares at Par and Premium",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "rights_bonus",
+          "name": "Rights and Bonus Issues",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "dividend_policy",
+          "name": "Dividend Policy and Payout Ratio",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        },
+        {
+          "id": "eps_nav",
+          "name": "Earnings per Share and NAV",
+          "levels": [
+            {
+              "id": "level_1",
+              "name": "Level 1: Basics",
+              "unlocked": true
+            },
+            {
+              "id": "level_2",
+              "name": "Level 2: Core Practice",
+              "unlocked": false
+            },
+            {
+              "id": "level_3",
+              "name": "Level 3: Application",
+              "unlocked": false
+            },
+            {
+              "id": "level_4",
+              "name": "Level 4: Challenge",
+              "unlocked": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
