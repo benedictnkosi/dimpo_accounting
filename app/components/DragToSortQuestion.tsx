@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Pressable, View, ScrollView } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { StyleSheet, Pressable, View, ScrollView, Animated, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFeedback } from '../contexts/FeedbackContext';
 import { useSound } from '../contexts/SoundContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import CheckContinueButton from './CheckContinueButton';
+import { logQuestionAnswer } from '@/services/questionReporting';
 
 interface DragToSortQuestionProps {
   id: string;
@@ -17,6 +19,12 @@ interface DragToSortQuestionProps {
   correct_order: string[];
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onMilestoneNotification?: (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => void;
+  onQuestionAnswered?: () => void;
 }
 
 interface SortableItem {
@@ -34,6 +42,8 @@ export function DragToSortQuestion({
   correct_order,
   onContinue,
   setIsQuestionAnswered,
+  onMilestoneNotification,
+  onQuestionAnswered,
 }: DragToSortQuestionProps) {
   console.log('[DragToSortQuestion] items:', items);
   const [sortableItems, setSortableItems] = useState<SortableItem[]>([]);
@@ -43,6 +53,7 @@ export function DragToSortQuestion({
   const { colors, isDark } = useTheme();
   const { setFeedback, resetFeedback } = useFeedback();
   const { soundEnabled } = useSound();
+  const { customerInfo } = useRevenueCat();
   const soundRef = React.useRef<Audio.Sound | null>(null);
 
   // Play feedback sound function
@@ -94,7 +105,7 @@ export function DragToSortQuestion({
     setSortableItems(initialItems);
   }, [items]);
 
-  const checkAnswer = () => {
+  const checkAnswer = async () => {
     const currentOrder = sortableItems
       .sort((a, b) => a.currentIndex - b.currentIndex)
       .map(item => item.text);
@@ -113,6 +124,40 @@ export function DragToSortQuestion({
         correctAnswer: correct_order.join(' → '),
         questionId: id,
       });
+      
+      // Log the question answer
+      const result = await logQuestionAnswer(id, true, customerInfo);
+      
+      // Check if daily limit was reached
+      if (result.limitReached) {
+        Alert.alert(
+          'Daily Limit Reached',
+          'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Check if lifetime limit was reached
+      if (result.lifetimeLimitReached) {
+        Alert.alert(
+          'Lifetime Limit Reached',
+          'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Handle milestone notification
+      if (result.milestoneNotification && onMilestoneNotification) {
+        onMilestoneNotification(result.milestoneNotification);
+      }
+
+      onQuestionAnswered?.();
     } else {
       playFeedbackSound('wrong');
       setIsCorrect(false);
@@ -125,6 +170,40 @@ export function DragToSortQuestion({
         correctAnswer: correct_order.join(' → '),
         questionId: id,
       });
+      
+      // Log the question answer
+      const result = await logQuestionAnswer(id, false, customerInfo);
+      
+      // Check if daily limit was reached
+      if (result.limitReached) {
+        Alert.alert(
+          'Daily Limit Reached',
+          'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Check if lifetime limit was reached
+      if (result.lifetimeLimitReached) {
+        Alert.alert(
+          'Lifetime Limit Reached',
+          'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Handle milestone notification
+      if (result.milestoneNotification && onMilestoneNotification) {
+        onMilestoneNotification(result.milestoneNotification);
+      }
+
+      onQuestionAnswered?.();
     }
   };
 
@@ -148,6 +227,11 @@ export function DragToSortQuestion({
   };
 
   const handleContinue = () => {
+    // Stop any playing audio
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
     onContinue?.();
   };
 

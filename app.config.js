@@ -1,15 +1,15 @@
 export default {
-  name: 'Dimpo Languages',
+  name: 'Dimpo Accounting',
   slug: 'exam-quiz',
   version: '1',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
-  scheme: 'dimpolanguages',
+  scheme: 'dimpoaccounting',
   userInterfaceStyle: 'automatic',
   newArchEnabled: false,
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.dimpolanguages',
+    bundleIdentifier: 'com.dimpoaccounting',
     buildNumber: '1.0.2',
     googleServicesFile: './GoogleService-Info.plist',
     infoPlist: {
@@ -17,10 +17,10 @@ export default {
       "UIBackgroundModes": ["remote-notification"]
     },
     "associatedDomains": ["applinks:examquiz.co.za"],
-    "storeKitConfiguration": "./ios/DimpoLanguages/Configuration.storekit"
+    "storeKitConfiguration": "./ios/DimpoAccounting/Configuration.storekit"
   },
   android: {
-    package: 'com.dimpolanguages',
+    package: 'com.dimpoaccounting',
     "intentFilters": [
       {
         "action": "VIEW",

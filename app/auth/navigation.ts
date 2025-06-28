@@ -7,6 +7,6 @@ export default function AuthNavigation() {
 export function useAuthNavigation() {
   return {
     navigateToLogin: () => router.replace('/login'),
-    navigateToHome: () => router.replace('/(tabs)'),
+    navigateToHome: () => router.replace('/'),
   };
 } 

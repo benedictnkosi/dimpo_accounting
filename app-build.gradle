@@ -86,9 +86,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.dimpolanguages'
+    namespace 'com.dimpoaccounting'
     defaultConfig {
-        applicationId 'com.dimpolanguages'
+        applicationId 'com.dimpoaccounting'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1011

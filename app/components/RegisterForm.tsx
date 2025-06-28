@@ -211,7 +211,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
             });
 
             // Navigate to tabs
-            router.replace('/(tabs)');
+            router.replace('/');
         } catch (error) {
             console.error('Registration error:', error);
             

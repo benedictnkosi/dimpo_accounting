@@ -11,6 +11,7 @@ interface RevenueCatContextType {
     restorePurchases: () => Promise<void>;
     identifyUser: (userId: string) => Promise<void>;
     resetUser: () => Promise<void>;
+    showPaywall: () => Promise<void>;
 }
 
 const RevenueCatContext = createContext<RevenueCatContextType | undefined>(undefined);
@@ -132,6 +133,17 @@ export function RevenueCatProvider({ children }: { children: React.ReactNode }) 
         }
     }
 
+    async function showPaywall() {
+        try {
+            setError(null);
+            await revenueCatService.showPaywall();
+        } catch (err) {
+            const error = err instanceof Error ? err : new Error('Failed to show paywall');
+            setError(error);
+            throw error;
+        }
+    }
+
     const value = {
         customerInfo,
         offerings,
@@ -141,6 +153,7 @@ export function RevenueCatProvider({ children }: { children: React.ReactNode }) 
         restorePurchases,
         identifyUser,
         resetUser,
+        showPaywall,
     };
 
     return (

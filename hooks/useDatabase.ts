@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { initDatabase, getAllTopics, insertTopic, getTopicsByMainTopic, deleteTopic, clearAllTopics } from '@/services/database';
+import { isDatabaseInitialized, initializeDatabaseOnStartup } from '@/services/databaseInit';
 
 export interface Topic {
   id: number;
@@ -9,18 +10,37 @@ export interface Topic {
 
 export const useDatabase = () => {
   const [isInitialized, setIsInitialized] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); // Start with loading true
   const [error, setError] = useState<string | null>(null);
 
   // Initialize database on mount
   useEffect(() => {
-    try {
-      initDatabase();
-      setIsInitialized(true);
-    } catch (err) {
-      console.error('Failed to initialize database:', err);
-      setError('Failed to initialize database');
-    }
+    const initializeDatabase = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        console.log('[useDatabase] Checking database initialization...');
+        
+        // Check if database is already initialized
+        if (!isDatabaseInitialized()) {
+          console.log('[useDatabase] Database not initialized, starting initialization...');
+          await initializeDatabaseOnStartup();
+          console.log('[useDatabase] Database initialization completed');
+        } else {
+          console.log('[useDatabase] Database already initialized');
+        }
+        
+        setIsInitialized(true);
+        setIsLoading(false);
+      } catch (err) {
+        console.error('[useDatabase] Error during database initialization:', err);
+        setError(err instanceof Error ? err.message : 'Failed to initialize database');
+        setIsLoading(false);
+      }
+    };
+
+    initializeDatabase();
   }, []);
 
   // Insert a new topic

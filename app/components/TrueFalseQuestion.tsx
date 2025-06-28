@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSound } from '../contexts/SoundContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import { logQuestionAnswer } from '@/services/questionReporting';
 
 interface TrueFalseQuestionProps {
   id: string;
@@ -15,6 +17,12 @@ interface TrueFalseQuestionProps {
   explanation?: string;
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onMilestoneNotification?: (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => void;
+  onQuestionAnswered?: () => void;
 }
 
 export function TrueFalseQuestion({
@@ -24,9 +32,12 @@ export function TrueFalseQuestion({
   explanation,
   onContinue,
   setIsQuestionAnswered,
+  onMilestoneNotification,
+  onQuestionAnswered,
 }: TrueFalseQuestionProps) {
   const { colors } = useTheme();
   const { soundEnabled } = useSound();
+  const { customerInfo } = useRevenueCat();
   const [selected, setSelected] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -77,20 +88,60 @@ export function TrueFalseQuestion({
     setIsQuestionAnswered(false);
   }, [id]);
 
-  const handleSelect = (value: string) => {
+  const handleSelect = async (value: string) => {
     if (isAnswered) return;
     setSelected(value);
     setIsAnswered(true);
     setIsQuestionAnswered(true);
     const isCorrect = value === answer;
     
+    // Log the answer
+    const result = await logQuestionAnswer(id, isCorrect, customerInfo);
+    
+    // Check if daily limit was reached
+    if (result.limitReached) {
+      Alert.alert(
+        'Daily Limit Reached',
+        'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+        [
+          { text: 'OK', onPress: () => {} }
+        ]
+      );
+      return;
+    }
+
+    // Check if lifetime limit was reached
+    if (result.lifetimeLimitReached) {
+      Alert.alert(
+        'Lifetime Limit Reached',
+        'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+        [
+          { text: 'OK', onPress: () => {} }
+        ]
+      );
+      return;
+    }
+
+    // Handle milestone notification
+    if (result.milestoneNotification && onMilestoneNotification) {
+      onMilestoneNotification(result.milestoneNotification);
+    }
+    
     // Play sound feedback
     playFeedbackSound(isCorrect ? 'correct' : 'wrong');
     
     setFeedback(isCorrect ? 'Correct! 🎉' : `Incorrect. The answer is "${answer}"`);
+    
+    // Call onQuestionAnswered after logging the answer
+    onQuestionAnswered?.();
   };
 
   const handleContinue = () => {
+    // Stop any playing audio
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
     setSelected(null);
     setIsAnswered(false);
     setFeedback(null);

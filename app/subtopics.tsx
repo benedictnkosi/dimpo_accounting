@@ -1,8 +1,10 @@
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
@@ -10,6 +12,10 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { analytics } from '@/services/analytics';
 import subtopicEmojis from '@/assets/subtopic_emojis.json';
 import topicEmojis from '@/assets/topic_emojis.json';
+import { getLevelCompletionStatus, getAllTopics, hasIncorrectQuestions, getQuestionsByTopicAndLevel, logQuestionStatistics } from '@/services/database';
+import { useDatabase } from '@/hooks/useDatabase';
+import { SUBTOPIC_DESCRIPTIONS } from './constants/subtopicDescriptions';
+import { LevelUnlockModal } from './components/LevelUnlockModal';
 
 interface Topic {
   id: string;
@@ -29,57 +35,437 @@ interface Level {
   unlocked: boolean;
 }
 
-// Fun color palette for subtopic cards
-const cardColors = [
-  '#FFD6E0', // pink
-  '#D6EFFF', // light blue
-  '#FFF9D6', // yellow
-  '#D6FFD9', // mint
-  '#F3D6FF', // lavender
-  '#FFE6D6', // peach
-  '#D6FFF6', // aqua
-  '#F9D6FF', // light purple
-  '#FFF3D6', // cream
-  '#D6F6FF', // sky
-];
-
-// Level details mapping using level.name as key
-const levelDetails: Record<string, { goal: string; useCase: string }> = {
-  'Level 1: Basics': {
-    goal: 'Recognize terms, categorize accounts, understand the purpose of the topic',
-    useCase: 'Early learners, revision',
-  },
-  'Level 2: Core Practice': {
-    goal: 'Perform core calculations and build the format step-by-step',
-    useCase: 'Concept application, main content',
-  },
-  'Level 3: Adjustments': {
-    goal: 'Apply real-world scenarios, journal updates, financial statement edits',
-    useCase: 'Prep for complex examples',
-  },
-  'Level 4: Challenge Mode': {
-    goal: 'Solve integrated exam-style problems with distractors or time pressure',
-    useCase: 'Exam prep, confident learners',
-  },
-};
-
-// Add emoji mapping for each level
-const levelEmojis: Record<string, string> = {
-  'Level 1: Basics': '🧠✨',
-  'Level 2: Core Practice': '🛠️📘',
-  'Level 3: Adjustments': '🧾🔍',
-  'Level 4: Challenge Mode': '🎯🔥',
-};
-
 export default function SubtopicsScreen() {
   const { topicId, topicName, subtopics } = useLocalSearchParams();
   const [topic, setTopic] = useState<Topic | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [expandedSubtopics, setExpandedSubtopics] = useState<Set<string>>(new Set());
+  const [levelCompletionStatus, setLevelCompletionStatus] = useState<Record<string, Array<{
+    level: string;
+    total_questions: number;
+    correctly_answered_questions: number;
+    incorrectly_answered_questions: number;
+    is_completed: boolean;
+  }>>>({});
+  const [incorrectQuestions, setIncorrectQuestions] = useState<Record<string, Array<string>>>({});
+  const [levelUnlockModalVisible, setLevelUnlockModalVisible] = useState(false);
+  const [unlockedLevel, setUnlockedLevel] = useState<{
+    topicId: string;
+    subtopicId: string;
+    levelIndex: number;
+    subtopicName: string;
+    levelName: string;
+  } | null>(null);
+  const [previousUnlockedLevels, setPreviousUnlockedLevels] = useState<Record<string, Set<number>>>({});
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { isInitialized } = useDatabase();
+
+  // Storage key for unlock modal state
+  const getUnlockModalStorageKey = (topicId: string, subtopicId: string, levelIndex: number) => {
+    return `unlock_modal_shown_${topicId}_${subtopicId}_${levelIndex}`;
+  };
+
+  // Save unlock modal state to AsyncStorage
+  const saveUnlockModalState = async (topicId: string, subtopicId: string, levelIndex: number) => {
+    try {
+      const storageKey = getUnlockModalStorageKey(topicId, subtopicId, levelIndex);
+      await AsyncStorage.setItem(storageKey, 'true');
+      console.log('💾 [DEBUG] Saved unlock modal state to storage:', storageKey);
+    } catch (error) {
+      console.error('💾 [DEBUG] Error saving unlock modal state:', error);
+    }
+  };
+
+  // Check if unlock modal has been shown for a specific level
+  const hasUnlockModalBeenShown = async (topicId: string, subtopicId: string, levelIndex: number): Promise<boolean> => {
+    try {
+      const storageKey = getUnlockModalStorageKey(topicId, subtopicId, levelIndex);
+      const hasBeenShown = await AsyncStorage.getItem(storageKey);
+      return hasBeenShown === 'true';
+    } catch (error) {
+      console.error('💾 [DEBUG] Error checking unlock modal state:', error);
+      return false;
+    }
+  };
+
+  // Fun color palette for subtopic cards
+  const cardColors = isDark
+    ? [
+        '#2D2A3A', // dark purple
+        '#223344', // dark blue
+        '#3A3A2D', // dark olive
+        '#233A2D', // dark green
+        '#332344', // dark lavender
+        '#44332A', // dark peach
+        '#23443A', // dark aqua
+        '#342344', // dark purple
+        '#443A23', // dark cream
+        '#233A44', // dark sky
+      ]
+    : [
+        '#FFD6E0', // pink
+        '#D6EFFF', // light blue
+        '#FFF9D6', // yellow
+        '#D6FFD9', // mint
+        '#F3D6FF', // lavender
+        '#FFE6D6', // peach
+        '#D6FFF6', // aqua
+        '#F9D6FF', // light purple
+        '#FFF3D6', // cream
+        '#D6F6FF', // sky
+      ];
+
+  // Level details mapping using level.name as key
+  const levelDetails: Record<string, { goal: string; useCase: string }> = {
+    'Level 1: Basics': {
+      goal: 'Recognize terms, categorize accounts, understand the purpose of the topic',
+      useCase: 'Early learners, revision',
+    },
+    'Level 2: Core Practice': {
+      goal: 'Perform core calculations and build the format step-by-step',
+      useCase: 'Concept application, main content',
+    },
+    'Level 3: Advanced': {
+      goal: 'Apply real-world scenarios, journal updates, financial statement edits',
+      useCase: 'Prep for complex examples',
+    },
+    'Level 4: Expert': {
+      goal: 'Solve integrated exam-style problems with distractors or time pressure',
+      useCase: 'Exam prep, confident learners',
+    },
+  };
+
+  // Add emoji mapping for each level
+  const levelEmojis: Record<string, string> = {
+    'Level 1: Basics': '🧠✨',
+    'Level 2: Core Practice': '🛠️📘',
+    'Level 3: Advanced': '🧾🔍',
+    'Level 4: Expert': '🎯🔥',
+  };
+
+  // Function to determine if a level should be unlocked
+  const isLevelUnlocked = (subtopicId: string, levelIndex: number): boolean => {
+    console.log(`🔓 [DEBUG] isLevelUnlocked called for subtopic ${subtopicId}, level ${levelIndex}`);
+    
+    // Level 0 is always unlocked
+    if (levelIndex === 0) {
+      const completionStatus = levelCompletionStatus[subtopicId];
+      console.log(`🔓 [DEBUG] Level ${levelIndex} unlocked: ${!completionStatus ? 'no completion status' : 'level 0 (always unlocked)'}`);
+      return true;
+    }
+
+    const completionStatus = levelCompletionStatus[subtopicId];
+    console.log(`🔓 [DEBUG] Completion status for subtopic ${subtopicId}:`, completionStatus);
+
+    // Check if all previous levels meet the unlock criteria
+    for (let i = 0; i < levelIndex; i++) {
+      const previousLevel = completionStatus?.[i];
+      console.log(`🔓 [DEBUG] Checking previous level ${i}:`, previousLevel);
+
+      if (!previousLevel) {
+        console.log(`🔓 [DEBUG] Level ${levelIndex} locked: no data for previous level ${i}`);
+        return false;
+      }
+
+      const totalAnswered = previousLevel.correctly_answered_questions + previousLevel.incorrectly_answered_questions;
+      const accuracy = totalAnswered > 0 ? (previousLevel.correctly_answered_questions / totalAnswered) * 100 : 0;
+      const meetsUnlockCriteria = totalAnswered >= 9 && accuracy >= 80;
+
+      console.log(`🔓 [DEBUG] Level ${i} stats: ${totalAnswered} answered, ${accuracy.toFixed(1)}% accuracy`);
+      console.log(`🔓 [DEBUG] Level ${i} meets unlock criteria: ${meetsUnlockCriteria} (need 9+ answers and 80%+ accuracy)`);
+
+      if (!meetsUnlockCriteria) {
+        console.log(`🔓 [DEBUG] Level ${levelIndex} locked: previous level ${i} doesn't meet criteria`);
+        return false;
+      }
+    }
+
+    console.log(`🔓 [DEBUG] Level ${levelIndex} unlocked: all previous levels meet criteria`);
+    return true;
+  };
+
+  // Function to log question counts per subtopic
+  const logQuestionCountsPerSubtopic = useCallback(async () => {
+    if (!isInitialized || !topic) {
+      console.log('📊 [DEBUG] logQuestionCountsPerSubtopic: Not initialized or no topic');
+      return;
+    }
+
+    console.log('📊 [DEBUG] ===== QUESTION COUNTS PER SUBTOPIC =====');
+    console.log('📊 [DEBUG] Topic:', topic.name);
+    console.log('📊 [DEBUG] Total Subtopics:', topic.subtopics.length);
+
+    try {
+      // Get all topics from the database
+      const allTopics = await getAllTopics();
+      
+      // Create a mapping of subtopic names to topic IDs
+      const topicIdMap = new Map<string, number>();
+      for (const dbTopic of allTopics) {
+        topicIdMap.set(dbTopic.sub_topic, dbTopic.id);
+      }
+
+      let totalQuestionsInTopic = 0;
+      const levelNames = ['Level 1: Basics', 'Level 2: Core Practice', 'Level 3: Advanced', 'Level 4: Expert'];
+
+      // Log question counts for each subtopic
+      for (const subtopic of topic.subtopics) {
+        console.log(`📊 [DEBUG] --- ${subtopic.name} ---`);
+        
+        const topicId = topicIdMap.get(subtopic.name);
+        if (!topicId) {
+          console.log(`📊 [DEBUG] ❌ No database topic found for subtopic: ${subtopic.name}`);
+          continue;
+        }
+
+        let subtopicTotalQuestions = 0;
+        
+        // Get question counts for each level
+        for (const levelName of levelNames) {
+          try {
+            const questions = await getQuestionsByTopicAndLevel(topicId, levelName);
+            const questionCount = questions.length;
+            subtopicTotalQuestions += questionCount;
+            
+            console.log(`📊 [DEBUG]   ${levelName}: ${questionCount} questions`);
+          } catch (error) {
+            console.log(`📊 [DEBUG]   ${levelName}: Error getting questions - ${error}`);
+          }
+        }
+        
+        console.log(`📊 [DEBUG]   📈 Total questions in ${subtopic.name}: ${subtopicTotalQuestions}`);
+        totalQuestionsInTopic += subtopicTotalQuestions;
+        console.log(`📊 [DEBUG]   `);
+      }
+
+      console.log(`📊 [DEBUG] ===== SUMMARY =====`);
+      console.log(`📊 [DEBUG] Total questions in topic "${topic.name}": ${totalQuestionsInTopic}`);
+      console.log(`📊 [DEBUG] Average questions per subtopic: ${Math.round(totalQuestionsInTopic / topic.subtopics.length)}`);
+      console.log(`📊 [DEBUG] ========================`);
+
+    } catch (error) {
+      console.error('📊 [DEBUG] Error logging question counts:', error);
+    }
+  }, [isInitialized, topic]);
+
+  // Load level completion status for all subtopics
+  const loadLevelCompletionStatus = useCallback(async () => {
+    if (!isInitialized || !topic) {
+      console.log('📊 [DEBUG] loadLevelCompletionStatus: Not initialized or no topic');
+      return;
+    }
+
+    console.log('📊 [DEBUG] loadLevelCompletionStatus: Starting to load completion status...');
+    console.log('📊 [DEBUG] Topic:', topic.name, 'Subtopics:', topic.subtopics.length);
+
+    // Log question counts per subtopic
+    await logQuestionCountsPerSubtopic();
+
+    try {
+      const statusMap: Record<string, Array<{
+        level: string;
+        total_questions: number;
+        correctly_answered_questions: number;
+        incorrectly_answered_questions: number;
+        is_completed: boolean;
+      }>> = {};
+      const incorrectMap: Record<string, Array<string>> = {};
+
+      // Get all topics from the database
+      const allTopics = await getAllTopics();
+      console.log('📊 [DEBUG] All topics from database:', allTopics.length);
+      
+      // Create a mapping of subtopic names to topic IDs
+      const topicIdMap = new Map<string, number>();
+      for (const dbTopic of allTopics) {
+        // Map by subtopic name (which should match our subtopic names)
+        topicIdMap.set(dbTopic.sub_topic, dbTopic.id);
+      }
+
+      console.log('📊 [DEBUG] Topic ID mapping:', Object.fromEntries(topicIdMap));
+
+      // Load completion status for each subtopic
+      for (const subtopic of topic.subtopics) {
+        console.log(`📊 [DEBUG] Processing subtopic: ${subtopic.name}`);
+        
+        // Find the topic ID for this subtopic by matching the subtopic name
+        const topicId = topicIdMap.get(subtopic.name);
+        
+        if (topicId) {
+          try {
+            const status = await getLevelCompletionStatus(topicId);
+            statusMap[subtopic.id] = status;
+            console.log(`📊 [DEBUG] Loaded status for ${subtopic.name}:`, status);
+            
+            // Check for incorrect questions for each level
+            const incorrectLevels: string[] = [];
+            for (const level of subtopic.levels) {
+              const hasIncorrect = await hasIncorrectQuestions(topicId, level.name);
+              if (hasIncorrect) {
+                incorrectLevels.push(level.name);
+              }
+            }
+            incorrectMap[subtopic.id] = incorrectLevels;
+            console.log(`📊 [DEBUG] Incorrect questions for ${subtopic.name}:`, incorrectLevels);
+            
+            // console.log(`Loaded completion status for subtopic ${subtopic.name} (ID: ${subtopic.id}) with topic ID ${topicId}:`, status);
+          } catch (error) {
+            console.error(`📊 [DEBUG] Error loading completion status for subtopic ${subtopic.id}:`, error);
+            statusMap[subtopic.id] = [];
+            incorrectMap[subtopic.id] = [];
+          }
+        } else {
+          console.log(`📊 [DEBUG] No topic ID found for subtopic "${subtopic.name}" (ID: ${subtopic.id})`);
+          statusMap[subtopic.id] = [];
+          incorrectMap[subtopic.id] = [];
+        }
+      }
+
+      console.log('📊 [DEBUG] Final status map:', JSON.stringify(statusMap, null, 2));
+      setLevelCompletionStatus(statusMap);
+      setIncorrectQuestions(incorrectMap);
+
+    } catch (error) {
+      console.error('📊 [DEBUG] Error loading level completion status:', error);
+    }
+  }, [isInitialized, topic, logQuestionCountsPerSubtopic]);
+
+  // Check for newly unlocked levels and show modal
+  const checkForNewlyUnlockedLevels = useCallback(async () => {
+    if (!topic) {
+      console.log('🔍 [DEBUG] checkForNewlyUnlockedLevels: No topic available');
+      return;
+    }
+
+    console.log('🔍 [DEBUG] checkForNewlyUnlockedLevels: Starting check...');
+    console.log('🔍 [DEBUG] Current levelCompletionStatus:', JSON.stringify(levelCompletionStatus, null, 2));
+
+    const currentUnlockedLevels: Record<string, Set<number>> = {};
+    
+    // Calculate currently unlocked levels
+    for (const subtopic of topic.subtopics) {
+      currentUnlockedLevels[subtopic.id] = new Set();
+      console.log(`🔍 [DEBUG] Checking subtopic: ${subtopic.name} (ID: ${subtopic.id})`);
+      
+      for (let i = 0; i < subtopic.levels.length; i++) {
+        const isUnlocked = isLevelUnlocked(subtopic.id, i);
+        console.log(`🔍 [DEBUG] Level ${i} (${subtopic.levels[i].name}): unlocked = ${isUnlocked}`);
+        
+        if (isUnlocked) {
+          currentUnlockedLevels[subtopic.id].add(i);
+        }
+      }
+      
+      console.log(`🔍 [DEBUG] Currently unlocked levels for ${subtopic.name}:`, Array.from(currentUnlockedLevels[subtopic.id]));
+    }
+
+    console.log('🔍 [DEBUG] Previous unlocked levels:', JSON.stringify(
+      Object.fromEntries(
+        Object.entries(previousUnlockedLevels).map(([key, value]) => [key, Array.from(value)])
+      ), null, 2
+    ));
+
+    // Check for newly unlocked levels
+    for (const subtopic of topic.subtopics) {
+      const previousUnlocked = previousUnlockedLevels[subtopic.id] || new Set();
+      const currentlyUnlocked = currentUnlockedLevels[subtopic.id] || new Set();
+
+      console.log(`🔍 [DEBUG] Comparing ${subtopic.name}:`);
+      console.log(`  Previous: ${Array.from(previousUnlocked)}`);
+      console.log(`  Current: ${Array.from(currentlyUnlocked)}`);
+
+      // Find newly unlocked levels
+      for (const levelIndex of currentlyUnlocked) {
+        if (!previousUnlocked.has(levelIndex) && levelIndex > 0) { // Skip Level 1 as it's always unlocked
+          console.log(`🎉 [DEBUG] NEW LEVEL UNLOCKED! Subtopic: ${subtopic.name}, Level: ${levelIndex} (${subtopic.levels[levelIndex].name})`);
+          
+          // Check if we've already shown the modal for this specific level
+          const hasBeenShown = await hasUnlockModalBeenShown(topicId as string, subtopic.id, levelIndex);
+          if (hasBeenShown) {
+            console.log(`🎭 [DEBUG] Modal already shown for ${subtopic.name} Level ${levelIndex}, skipping`);
+            continue;
+          }
+          
+          // Show unlock modal for the newly unlocked level
+          setUnlockedLevel({
+            topicId: topicId as string,
+            subtopicId: subtopic.id,
+            levelIndex: levelIndex,
+            subtopicName: subtopic.name,
+            levelName: subtopic.levels[levelIndex].name
+          });
+          setLevelUnlockModalVisible(true);
+          
+          // Save the state to AsyncStorage
+          await saveUnlockModalState(topicId as string, subtopic.id, levelIndex);
+          
+          console.log('🎉 [DEBUG] Modal state set - unlockedLevel:', {
+            topicId: topicId as string,
+            subtopicId: subtopic.id,
+            levelIndex: levelIndex,
+            subtopicName: subtopic.name,
+            levelName: subtopic.levels[levelIndex].name
+          });
+          console.log('🎉 [DEBUG] Modal visibility set to: true');
+          
+          // Track the unlock event
+          analytics.track('level_unlocked', {
+            topic_id: topicId,
+            topic_name: topicName,
+            subtopic_id: subtopic.id,
+            subtopic_name: subtopic.name,
+            level_index: levelIndex,
+            level_name: subtopic.levels[levelIndex].name
+          });
+          
+          break; // Only show one modal at a time
+        }
+      }
+    }
+
+    // Update the previous unlocked levels reference
+    setPreviousUnlockedLevels(currentUnlockedLevels);
+    console.log('🔍 [DEBUG] Updated previous unlocked levels:', JSON.stringify(
+      Object.fromEntries(
+        Object.entries(previousUnlockedLevels).map(([key, value]) => [key, Array.from(value)])
+      ), null, 2
+    ));
+  }, [topic, topicId, topicName, levelCompletionStatus]);
+
+  // Use useFocusEffect to reload progress when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔄 [DEBUG] Screen focused - reloading level completion status');
+      loadLevelCompletionStatus();
+    }, [loadLevelCompletionStatus])
+  );
+
+  // Check for newly unlocked levels after completion status is loaded
+  useEffect(() => {
+    console.log('📊 [DEBUG] levelCompletionStatus changed:', Object.keys(levelCompletionStatus).length, 'subtopics loaded');
+    if (Object.keys(levelCompletionStatus).length > 0) {
+      console.log('🔍 [DEBUG] Triggering checkForNewlyUnlockedLevels');
+      checkForNewlyUnlockedLevels().catch(error => {
+        console.error('🔍 [DEBUG] Error in checkForNewlyUnlockedLevels:', error);
+      });
+    }
+  }, [levelCompletionStatus, checkForNewlyUnlockedLevels]);
+
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('🎭 [DEBUG] Modal state changed:');
+    console.log('  visible:', levelUnlockModalVisible);
+    console.log('  unlockedLevel:', unlockedLevel);
+  }, [levelUnlockModalVisible, unlockedLevel]);
+
+  // Debug render cycle
+  useEffect(() => {
+    console.log('🎭 [DEBUG] About to render LevelUnlockModal:', { levelUnlockModalVisible, unlockedLevel });
+  });
 
   useEffect(() => {
-    const loadTopic = () => {
+    const loadTopic = async () => {
       try {
         // Parse subtopics from route params
         let parsedSubtopics: Subtopic[] = [];
@@ -110,8 +496,33 @@ export default function SubtopicsScreen() {
     loadTopic();
   }, [topicId, topicName, subtopics]);
 
-  const handleLevelPress = (subtopic: Subtopic, level: Level) => {
+  const toggleSubtopicExpansion = (subtopicId: string) => {
+    setExpandedSubtopics(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(subtopicId)) {
+        // If clicking on an already expanded subtopic, close it
+        newSet.delete(subtopicId);
+      } else {
+        // If opening a new subtopic, close all others first
+        newSet.clear();
+        newSet.add(subtopicId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleLevelPress = async (subtopic: Subtopic, level: Level) => {
     if (!level.unlocked) return; // Don't allow clicking locked levels
+    
+    console.log('🎯 [DEBUG] User starting to answer questions:');
+    console.log('  Topic:', topicName);
+    console.log('  Subtopic:', subtopic.name);
+    console.log('  Level:', level.name);
+    console.log('  Current unlocked levels state:', JSON.stringify(
+      Object.fromEntries(
+        Object.entries(previousUnlockedLevels).map(([key, value]) => [key, Array.from(value)])
+      ), null, 2
+    ));
     
     analytics.track('accounting_level_selected', {
       topic_id: topicId,
@@ -122,11 +533,23 @@ export default function SubtopicsScreen() {
       level_name: level.name
     });
 
+    // Find the database topic ID for this subtopic
+    let databaseTopicId = null;
+    try {
+      const allTopics = await getAllTopics();
+      const topicRecord = allTopics.find(t => t.sub_topic === subtopic.name);
+      if (topicRecord) {
+        databaseTopicId = topicRecord.id.toString();
+      }
+    } catch (error) {
+      console.error('Error finding database topic ID:', error);
+    }
+
     // Navigate to accounting lesson screen with level info
     router.push({
       pathname: '/accounting-lesson',
       params: {
-        topicId: topicId as string,
+        topicId: databaseTopicId || topicId as string,
         topicName: topicName as string,
         subtopicId: subtopic.id,
         subtopicName: subtopic.name,
@@ -136,14 +559,55 @@ export default function SubtopicsScreen() {
     });
   };
 
+  const handleRetryPress = async (subtopic: Subtopic, level: Level) => {
+    analytics.track('accounting_retry_selected', {
+      topic_id: topicId,
+      topic_name: topicName,
+      subtopic_id: subtopic.id,
+      subtopic_name: subtopic.name,
+      level_id: level.id,
+      level_name: level.name
+    });
+
+    // Find the database topic ID for this subtopic
+    let databaseTopicId = null;
+    try {
+      const allTopics = await getAllTopics();
+      const topicRecord = allTopics.find(t => t.sub_topic === subtopic.name);
+      if (topicRecord) {
+        databaseTopicId = topicRecord.id.toString();
+      }
+    } catch (error) {
+      console.error('Error finding database topic ID:', error);
+    }
+
+    // Navigate to accounting lesson screen with retry mode enabled
+    router.push({
+      pathname: '/accounting-lesson',
+      params: {
+        topicId: databaseTopicId || topicId as string,
+        topicName: topicName as string,
+        subtopicId: subtopic.id,
+        subtopicName: subtopic.name,
+        levelId: level.id,
+        levelName: level.name,
+        retry: 'true'
+      }
+    });
+  };
+
   const handleBackPress = () => {
+    router.back();
+  };
+
+  const handleClosePress = () => {
     router.back();
   };
 
   const styles = StyleSheet.create({
     container: {
       flex: 1,
-      backgroundColor: isDark ? '#181926' : '#F7F7FA', // soft background
+      backgroundColor: colors.background, // use theme background
     },
     header: {
       flexDirection: 'row',
@@ -151,8 +615,8 @@ export default function SubtopicsScreen() {
       paddingHorizontal: 20,
       paddingVertical: 16,
       borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: isDark ? colors.surface : '#fff',
+      borderBottomColor: colors.textSecondary + '22',
+      backgroundColor: colors.card, // use theme card
     },
     headerTitleContainer: {
       flexDirection: 'row',
@@ -160,9 +624,9 @@ export default function SubtopicsScreen() {
       flex: 1,
       minWidth: 0,
     },
-    backButton: {
+    closeButton: {
       padding: 8,
-      marginRight: 12,
+      marginLeft: 12,
     },
     headerTitle: {
       fontSize: 18,
@@ -187,58 +651,79 @@ export default function SubtopicsScreen() {
       gap: 18,
     },
     subtopicCard: {
-      backgroundColor: isDark ? colors.surface : '#fff',
+      backgroundColor: colors.card, // use theme card
       paddingVertical: 22,
       paddingHorizontal: 18,
+      paddingRight: 32, // Add extra right padding for icon spacing
       borderRadius: 18,
       borderWidth: 0,
-      marginBottom: 10,
-      shadowColor: '#000',
+      marginBottom: 18,
+      shadowColor: isDark ? '#000' : '#000',
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.10,
+      shadowOpacity: isDark ? 0.25 : 0.10,
       shadowRadius: 10,
       elevation: 4,
+    },
+    subtopicCardPressed: {
+      opacity: 0.9,
+      transform: [{ scale: 0.98 }],
     },
     subtopicName: {
       fontSize: 12,
       fontWeight: '700',
       color: colors.text,
-      marginBottom: 14,
       letterSpacing: 0.1,
     },
     subtopicNameContainer: {
       flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 14,
+      alignItems: 'flex-start',
     },
     subtopicEmoji: {
       fontSize: 20,
       marginRight: 10,
+      paddingTop: 8,
+    },
+    subtopicHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    expandIcon: {
+      fontSize: 20,
+      color: colors.textSecondary,
+      marginRight: 18, // Increased for more space from the edge
     },
     levelsContainer: {
       flexDirection: 'column',
-      gap: 16,
+      gap: 18,
       flexWrap: 'nowrap',
+      marginTop: 8,
+      marginBottom: 8,
     },
     levelCard: {
       width: '100%',
       alignSelf: 'center',
-      backgroundColor: '#fff',
+      backgroundColor: colors.card, // use theme card
       borderRadius: 16,
-      padding: 14,
-      marginRight: 0,
+      padding: 18,
       marginBottom: 16,
-      shadowColor: '#000',
+      shadowColor: isDark ? '#000' : '#000',
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
+      shadowOpacity: isDark ? 0.18 : 0.08,
       shadowRadius: 8,
       elevation: 3,
       borderWidth: 1,
-      borderColor: '#eee',
+      borderColor: colors.textSecondary + '22',
+      flexDirection: 'column',
+      justifyContent: 'center',
     },
     levelCardLocked: {
-      backgroundColor: '#f3f3f3',
-      borderColor: '#e0e0e0',
+      backgroundColor: isDark ? '#23232A' : '#f3f3f3',
+      borderColor: isDark ? '#333344' : '#e0e0e0',
+    },
+    levelCardCompleted: {
+      backgroundColor: colors.primary + '10',
+      borderColor: colors.primary + '40',
     },
     levelCardPressed: {
       opacity: 0.85,
@@ -247,54 +732,104 @@ export default function SubtopicsScreen() {
     levelCardHeader: {
       flexDirection: 'row',
       alignItems: 'center',
-      marginBottom: 6,
+      marginBottom: 8,
+      gap: 6,
+    },
+    lockIcon: {
+      marginRight: 6,
+      fontSize: 18,
+      color: colors.textSecondary,
+    },
+    completionIcon: {
+      marginRight: 6,
+      fontSize: 18,
+      color: colors.primary,
     },
     levelCardTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: '#6C47FF',
+      fontSize: 17,
+      fontWeight: 'bold',
+      color: isDark ? '#B6A6FF' : '#6C47FF',
       marginLeft: 2,
+      flexShrink: 1,
     },
-    levelCardGoal: {
-      fontSize: 12,
-      color: '#333',
-      marginBottom: 2,
-    },
-    levelCardUseCase: {
-      fontSize: 11,
-      color: '#888',
-    },
-    levelBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 999,
-      backgroundColor: colors.primary + '18',
-      marginRight: 0,
-      marginBottom: 4,
-    },
-    levelBadgePressed: {
-      opacity: 0.8,
-      transform: [{ scale: 0.95 }],
-    },
-    levelText: {
-      fontSize: 13,
+    completedLevelText: {
       color: colors.primary,
-      fontWeight: '600',
-      letterSpacing: 0.1,
-    },
-    lockedLevelBadge: {
-      backgroundColor: colors.textSecondary + '18',
+      fontWeight: 'bold',
     },
     lockedLevelText: {
       color: colors.textSecondary,
       fontWeight: '500',
     },
-    lockIcon: {
-      marginRight: 5,
-      fontSize: 14,
+    progressContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginLeft: 'auto',
+      gap: 4,
+    },
+    progressText: {
+      fontSize: 12,
       color: colors.textSecondary,
+      fontWeight: '600',
+      minWidth: 36,
+      textAlign: 'right',
+    },
+    progressBar: {
+      height: 8,
+      width: 60,
+      backgroundColor: colors.textSecondary + '18',
+      borderRadius: 999,
+      overflow: 'hidden',
+    },
+    progressFill: {
+      height: '100%',
+      backgroundColor: colors.primary,
+      borderRadius: 999,
+    },
+    levelCardGoal: {
+      fontSize: 13,
+      color: isDark ? '#CCCCCC' : '#333',
+      marginBottom: 2,
+      marginTop: 2,
+    },
+    levelCardUseCase: {
+      fontSize: 12,
+      color: isDark ? '#AAAAAA' : '#888',
+      marginBottom: 2,
+    },
+    lockMessage: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: '500',
+      marginTop: 4,
+    },
+    completionMessage: {
+      fontSize: 12,
+      color: colors.primary,
+      fontWeight: '600',
+      marginTop: 4,
+    },
+    retryButton: {
+      backgroundColor: isDark ? '#FF8B5C' : '#FF6B35',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 8,
+      marginTop: 8,
+      alignSelf: 'flex-start',
+    },
+    retryButtonText: {
+      color: isDark ? '#222' : '#fff',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    retryButtonPressed: {
+      opacity: 0.8,
+      transform: [{ scale: 0.95 }],
+    },
+    subtopicDescription: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      fontWeight: '500',
+      marginTop: 4,
     },
   });
 
@@ -315,10 +850,16 @@ export default function SubtopicsScreen() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={handleBackPress}>
-            <ThemedText style={{ fontSize: 18, color: colors.primary }}>
-              ← 
+          <View style={styles.headerTitleContainer}>
+            <ThemedText style={{ fontSize: 24, marginRight: 8 }}>
+              📘
             </ThemedText>
+            <ThemedText style={styles.headerTitle} numberOfLines={2} ellipsizeMode="tail">
+              Topic
+            </ThemedText>
+          </View>
+          <Pressable style={styles.closeButton} onPress={handleClosePress}>
+            <Ionicons name="close" size={24} color={colors.textSecondary} />
           </Pressable>
         </View>
         <View style={styles.loadingContainer}>
@@ -333,80 +874,180 @@ export default function SubtopicsScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={handleBackPress}>
-          <ThemedText style={{ fontSize: 18, color: colors.primary }}>
-            ← 
-          </ThemedText>
-        </Pressable>
         <View style={styles.headerTitleContainer}>
           <ThemedText style={{ fontSize: 24, marginRight: 8 }}>
-            {(topicEmojis.topic_emojis as any)[topic.name] || '📘'}
+            {topic ? (topicEmojis.topic_emojis as any)[topic.name] || '📘' : '📘'}
           </ThemedText>
           <ThemedText style={styles.headerTitle} numberOfLines={2} ellipsizeMode="tail">
-            {topic.name}
+            {topic?.name || 'Topic'}
           </ThemedText>
         </View>
+        
+        <Pressable style={styles.closeButton} onPress={handleClosePress}>
+          <Ionicons name="close" size={24} color={colors.textSecondary} />
+        </Pressable>
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.subtopicsContainer}>
-          {topic.subtopics.map((subtopic, idx) => (
-            <View
-              key={subtopic.id}
-              style={[
-                styles.subtopicCard,
-                { backgroundColor: cardColors[idx % cardColors.length], borderWidth: 0, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, elevation: 6 },
-              ]}
-            >
-              <View style={styles.subtopicNameContainer}>
-                <ThemedText style={[styles.subtopicEmoji, { fontSize: 28 }]}> {/* Larger emoji */}
-                  {(subtopicEmojis.subtopic_emojis as any)[subtopic.name] || '📚'}
-                </ThemedText>
-                <ThemedText style={[styles.subtopicName, { fontSize: 14 }]}> {/* Larger name */}
-                  {subtopic.name}
-                </ThemedText>
-              </View>
-              <View style={styles.levelsContainer}>
-                {subtopic.levels.map((level) => {
-                  const details = levelDetails[level.name] || {};
-                  const emoji = levelEmojis[level.name] || '';
-                  return (
-                    <Pressable
-                      key={level.id}
-                      style={({ pressed }) => [
-                        styles.levelCard,
-                        !level.unlocked && styles.levelCardLocked,
-                        pressed && level.unlocked && styles.levelCardPressed,
-                      ]}
-                      onPress={() => handleLevelPress(subtopic, level)}
-                      disabled={!level.unlocked}
-                    >
-                      <View style={styles.levelCardHeader}>
-                        {!level.unlocked && (
-                          <Ionicons name="lock-closed" style={styles.lockIcon} />
-                        )}
-                        <ThemedText style={{ fontSize: 18, marginRight: 6 }}>{emoji}</ThemedText>
-                        <ThemedText style={[
-                          styles.levelCardTitle,
-                          !level.unlocked && styles.lockedLevelText,
-                        ]}>
-                          {level.name}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.levelCardGoal}>
-                        {details.goal}
+          {topic.subtopics.map((subtopic, idx) => {
+            const isExpanded = expandedSubtopics.has(subtopic.id);
+            return (
+              <Pressable
+                key={subtopic.id}
+                style={({ pressed }) => [
+                  styles.subtopicCard,
+                  { backgroundColor: cardColors[idx % cardColors.length], borderWidth: 0, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, elevation: 6 },
+                  pressed && styles.subtopicCardPressed,
+                ]}
+                onPress={() => toggleSubtopicExpansion(subtopic.id)}
+              >
+                <View style={styles.subtopicHeader}>
+                  <View style={styles.subtopicNameContainer}>
+                    <ThemedText style={[styles.subtopicEmoji, { fontSize: 28 }]}> {/* Larger emoji */}
+                      {(subtopicEmojis.subtopic_emojis as any)[subtopic.name] || '📚'}
+                    </ThemedText>
+                    <View style={{ flex: 1 }}>
+                      <ThemedText style={[styles.subtopicName, { fontSize: 14 }]}> {/* Larger name */}
+                        {subtopic.name}
                       </ThemedText>
-                      <ThemedText style={styles.levelCardUseCase}>
-                        {details.useCase}
+                      <ThemedText style={styles.subtopicDescription}>
+                        {SUBTOPIC_DESCRIPTIONS[subtopic.name] || 'Learn essential accounting concepts and practices.'}
                       </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
+                    </View>
+                  </View>
+                  <Ionicons 
+                    name={isExpanded ? "chevron-up" : "chevron-down"} 
+                    style={styles.expandIcon} 
+                  />
+                </View>
+                
+                {isExpanded && (
+                  <View style={styles.levelsContainer}>
+                    {subtopic.levels.map((level, levelIndex) => {
+                      const details = levelDetails[level.name] || {};
+                      const emoji = levelEmojis[level.name] || '';
+                      const isUnlocked = isLevelUnlocked(subtopic.id, levelIndex);
+                      const completionStatus = levelCompletionStatus[subtopic.id]?.[levelIndex];
+                      const progressPercentage = completionStatus && completionStatus.total_questions > 0 
+                        ? (completionStatus.correctly_answered_questions / completionStatus.total_questions) * 100 
+                        : 0;
+                      const accuracyPercentage = completionStatus && (completionStatus.correctly_answered_questions + completionStatus.incorrectly_answered_questions) > 0
+                        ? (completionStatus.correctly_answered_questions / (completionStatus.correctly_answered_questions + completionStatus.incorrectly_answered_questions)) * 100
+                        : 0;
+                      const hasIncorrect = incorrectQuestions[subtopic.id]?.includes(level.name) || false;
+                      
+                      // Calculate unlocking criteria for current level
+                      const totalAnswered = completionStatus ? (completionStatus.correctly_answered_questions + completionStatus.incorrectly_answered_questions) : 0;
+                      const meetsUnlockCriteria = totalAnswered >= 9 && accuracyPercentage >= 80;
+                      
+                      return (
+                        <Pressable
+                          key={level.id}
+                          style={({ pressed }) => [
+                            styles.levelCard,
+                            !isUnlocked && styles.levelCardLocked,
+                            pressed && isUnlocked && styles.levelCardPressed,
+                            completionStatus?.is_completed && styles.levelCardCompleted,
+                          ]}
+                          onPress={() => handleLevelPress(subtopic, level)}
+                          disabled={!isUnlocked}
+                        >
+                          <View style={styles.levelCardHeader}>
+                            {!isUnlocked && (
+                              <Ionicons name="lock-closed" style={styles.lockIcon} />
+                            )}
+                            {completionStatus?.is_completed && (
+                              <Ionicons name="checkmark-circle" style={styles.completionIcon} />
+                            )}
+                            <ThemedText style={[
+                              styles.levelCardTitle,
+                              !isUnlocked && styles.lockedLevelText,
+                              completionStatus?.is_completed && styles.completedLevelText,
+                            ]}>
+                              {level.name}
+                            </ThemedText>
+                            {completionStatus && completionStatus.total_questions > 0 && isUnlocked && (
+                              <View style={styles.progressContainer}>
+                                
+                                
+                                <ThemedText style={[styles.progressText, { marginLeft: 4, color: colors.primary, fontWeight: 'bold' }]}>
+                                  ({Math.round(progressPercentage)}%)
+                                </ThemedText>
+                                <View style={styles.progressBar}>
+                                  <View 
+                                    style={[
+                                      styles.progressFill, 
+                                      { width: `${progressPercentage}%` }
+                                    ]} 
+                                  />
+                                </View>
+                              </View>
+                            )}
+                          </View>
+                          <ThemedText style={styles.levelCardGoal}>
+                            {details.goal}
+                          </ThemedText>
+                          <ThemedText style={styles.levelCardUseCase}>
+                            {details.useCase}
+                          </ThemedText>
+                         
+                          {completionStatus?.is_completed && isUnlocked && (
+                            <ThemedText style={styles.completionMessage}>
+                              ✓ Level completed! ({Math.round(progressPercentage)}% progress, {Math.round(accuracyPercentage)}% accuracy)
+                            </ThemedText>
+                          )}
+                          {completionStatus && !completionStatus.is_completed && completionStatus.total_questions > 0 && isUnlocked && (
+                            <ThemedText style={[styles.completionMessage, { color: colors.textSecondary }]}>
+                              📊 {Math.round(accuracyPercentage)}% accuracy
+                            </ThemedText>
+                          )}
+                          
+                          {/* Show unlocking criteria for locked levels */}
+                          {!isUnlocked && levelIndex > 0 && completionStatus && (
+                            <ThemedText style={[styles.completionMessage, { color: colors.textSecondary, fontSize: 11 }]}>
+                              🔓 Unlock: {totalAnswered}/9 answers, {Math.round(accuracyPercentage)}%/80% accuracy
+                            </ThemedText>
+                          )}
+                          
+                          {/* Show progress towards unlocking for current level */}
+                          {isUnlocked && levelIndex > 0 && completionStatus && !meetsUnlockCriteria && totalAnswered > 0 && (
+                            <ThemedText style={[styles.completionMessage, { color: colors.textSecondary, fontSize: 11 }]}>
+                              🔓 Next level: {totalAnswered}/9 answers, {Math.round(accuracyPercentage)}%/80% accuracy
+                            </ThemedText>
+                          )}
+                          
+                          {hasIncorrect && isUnlocked && (
+                            <Pressable
+                              style={({ pressed }) => [
+                                styles.retryButton,
+                                pressed && styles.retryButtonPressed
+                              ]}
+                              onPress={() => handleRetryPress(subtopic, level)}
+                            >
+                              <ThemedText style={styles.retryButtonText}>
+                                🔄 Retry Incorrect
+                              </ThemedText>
+                            </Pressable>
+                          )}
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                )}
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
+      <LevelUnlockModal
+        visible={levelUnlockModalVisible}
+        onDismiss={() => {
+          console.log('🎭 [DEBUG] Modal dismissed');
+          setLevelUnlockModalVisible(false);
+        }}
+        unlockedLevel={unlockedLevel}
+      />
     </SafeAreaView>
   );
 } 

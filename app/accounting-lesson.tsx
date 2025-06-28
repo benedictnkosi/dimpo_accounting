@@ -1,13 +1,21 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { useEffect, useState, useCallback } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View, Alert, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { ThemedText } from '@/components/ThemedText';
-import { HOST_URL } from '@/config/api';
+import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { analytics } from '@/services/analytics';
+import { useDatabase } from '@/hooks/useDatabase';
+import { getQuestionsByTopicAndLevel, getIncorrectQuestionsByTopicAndLevel, getTopicsByMainTopic, isLevelCompleted } from '@/services/database';
+import { DailyLimitBanner } from './components/DailyLimitBanner';
+import { MilestoneModal } from './components/MilestoneModal';
+import { getCombinedLimitInfo } from '@/services/lifetimeStats';
+import { CombinedLimitInfo } from '@/services/lifetimeStats';
 
 // Import question components
 import { TapToSelectQuestion } from './components/TapToSelectQuestion';
@@ -19,9 +27,7 @@ import { StepFlowQuestion } from './components/StepFlowQuestion';
 import { DragToSortQuestion } from './components/DragToSortQuestion';
 
 import subtopicEmojis from '@/assets/subtopic_emojis.json';
-
-// Dev mode check
-const __DEV__ = process.env.NODE_ENV === 'development';
+import subtopicEmojisData from '@/assets/subtopic_emojis.json';
 
 interface AccountingQuestion {
   id: string;
@@ -46,33 +52,166 @@ interface AccountingLessonData {
   data: AccountingQuestion[];
 }
 
+// Fisher-Yates shuffle algorithm
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 export default function AccountingLessonScreen() {
-  const { topicId, topicName, subtopicId, subtopicName, levelId, levelName } = useLocalSearchParams();
+  const { topicId, topicName, subtopicId, subtopicName, levelId, levelName, retry } = useLocalSearchParams();
   const [lessonData, setLessonData] = useState<AccountingLessonData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [isQuestionAnswered, setIsQuestionAnswered] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [combinedLimitInfo, setCombinedLimitInfo] = useState<CombinedLimitInfo | null>(null);
+  const [milestoneModal, setMilestoneModal] = useState<{
+    visible: boolean;
+    milestone: '75' | '50' | '25';
+    message: string;
+  }>({
+    visible: false,
+    milestone: '75',
+    message: ''
+  });
+  
   const router = useRouter();
   const { colors, isDark } = useTheme();
+  const { isInitialized, isLoading: isDatabaseLoading } = useDatabase();
+  const { customerInfo, showPaywall } = useRevenueCat();
+
+  // Load combined limit info
+  const loadCombinedLimitInfo = useCallback(async () => {
+    if (customerInfo) {
+      try {
+        const limitInfo = await getCombinedLimitInfo(customerInfo);
+        setCombinedLimitInfo(limitInfo);
+      } catch (error) {
+        console.error('Error loading combined limit info:', error);
+      }
+    }
+  }, [customerInfo]);
+
+  // Load combined limit info when customer info changes
+  useEffect(() => {
+    loadCombinedLimitInfo();
+  }, [loadCombinedLimitInfo]);
+
+  // 1. Add a handler to refresh combined limit info after a question is answered
+  const handleQuestionAnswered = useCallback(() => {
+    loadCombinedLimitInfo();
+  }, [loadCombinedLimitInfo]);
 
   useEffect(() => {
     const fetchQuestions = async () => {
+      if (!isInitialized) {
+        return; // Wait for database to be initialized
+      }
+
       try {
         setIsLoading(true);
         setError(null);
         
-        const url = `${HOST_URL}/api/accounting-questions/topic/${subtopicName}/level/${levelName}`;
-        console.log('Fetching questions from:', url);
-        const response = await fetch(url);
+        // First, get the topic ID from the database using the subtopic name
+        const topics = await getTopicsByMainTopic(topicName as string);
+        const targetTopic = topics.find(topic => topic.sub_topic === subtopicName);
         
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        if (!targetTopic) {
+          throw new Error(`Topic not found: ${subtopicName}`);
+        }
+
+        // Check if we're in retry mode
+        const isRetryMode = retry === 'true';
+        
+        // Get questions from database for this topic and level
+        let dbQuestions;
+        if (isRetryMode) {
+          dbQuestions = await getIncorrectQuestionsByTopicAndLevel(targetTopic.id, levelName as string);
+          if (dbQuestions.length === 0) {
+            throw new Error('No incorrect questions found for this level. Great job!');
+          }
+        } else {
+          dbQuestions = await getQuestionsByTopicAndLevel(targetTopic.id, levelName as string);
         }
         
-        const data: AccountingLessonData = await response.json();
-        console.log('Questions fetched:', data);
-        setLessonData(data);
+        // Convert database questions to the expected format
+        const convertedQuestions: AccountingQuestion[] = dbQuestions.map(dbQuestion => {
+          const baseQuestion: AccountingQuestion = {
+            id: dbQuestion.question_id,
+            type: dbQuestion.question_type,
+            prompt: dbQuestion.prompt,
+            explanation: dbQuestion.explanation || undefined
+          };
+
+          // Parse JSON fields based on question type
+          switch (dbQuestion.question_type) {
+            case 'tap-to-select':
+              if (dbQuestion.options) {
+                baseQuestion.options = JSON.parse(dbQuestion.options);
+              }
+              baseQuestion.answer = dbQuestion.answer || undefined;
+              break;
+            
+            case 'matching':
+              if (dbQuestion.pairs) {
+                baseQuestion.pairs = JSON.parse(dbQuestion.pairs);
+              }
+              break;
+            
+            case 'categorise':
+              if (dbQuestion.categories) {
+                baseQuestion.categories = JSON.parse(dbQuestion.categories);
+              }
+              if (dbQuestion.items) {
+                baseQuestion.items = JSON.parse(dbQuestion.items);
+              }
+              break;
+            
+            case 'true-false':
+              baseQuestion.answer = dbQuestion.answer || undefined;
+              break;
+            
+            case 'multi-step':
+              baseQuestion.context = dbQuestion.context || undefined;
+              if (dbQuestion.steps) {
+                baseQuestion.steps = JSON.parse(dbQuestion.steps);
+              }
+              break;
+            
+            case 'step-flow':
+              if (dbQuestion.steps) {
+                baseQuestion.steps = JSON.parse(dbQuestion.steps);
+              }
+              break;
+            
+            case 'drag-to-sort':
+              if (dbQuestion.items) {
+                baseQuestion.items = JSON.parse(dbQuestion.items);
+              }
+              if (dbQuestion.correct_order) {
+                baseQuestion.correct_order = JSON.parse(dbQuestion.correct_order);
+              }
+              break;
+          }
+
+          return baseQuestion;
+        });
+
+        // Shuffle the questions
+        const shuffledQuestions = shuffleArray(convertedQuestions);
+
+        const lessonData: AccountingLessonData = {
+          topic: topicName as string,
+          level: levelName as string,
+          data: shuffledQuestions
+        };
+
+        setLessonData(lessonData);
         
         analytics.track('accounting_lesson_started', {
           topic_id: topicId,
@@ -81,25 +220,26 @@ export default function AccountingLessonScreen() {
           subtopic_name: subtopicName,
           level_id: levelId,
           level_name: levelName,
-          question_count: data.data.length
+          question_count: shuffledQuestions.length,
+          is_retry_mode: isRetryMode
         });
         
       } catch (err) {
-        console.error('Error fetching accounting questions:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load questions');
+        console.error('Error fetching accounting questions from database:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load questions from database');
       } finally {
         setIsLoading(false);
       }
     };
 
     fetchQuestions();
-  }, [topicId, topicName, subtopicId, subtopicName, levelId, levelName]);
+  }, [isInitialized, topicId, topicName, subtopicId, subtopicName, levelId, levelName, retry]);
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const handleNextQuestion = () => {
+  const handleNextQuestion = async () => {
     if (lessonData && currentQuestionIndex < lessonData.data.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setIsQuestionAnswered(false);
@@ -114,6 +254,29 @@ export default function AccountingLessonScreen() {
         level_name: levelName,
         total_questions: lessonData?.data.length || 0
       });
+
+      // Check if level is completed
+      try {
+        if (topicId && levelName) {
+          const topicIdNum = parseInt(topicId as string);
+          if (!isNaN(topicIdNum)) {
+            const levelCompleted = await isLevelCompleted(topicIdNum, levelName as string);
+            if (levelCompleted) {
+              analytics.track('level_completed', {
+                topic_id: topicId,
+                topic_name: topicName,
+                subtopic_id: subtopicId,
+                subtopic_name: subtopicName,
+                level_id: levelId,
+                level_name: levelName
+              });
+              console.log(`Level ${levelName} completed!`);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error checking level completion:', error);
+      }
       
       // Navigate back to subtopics
       router.back();
@@ -124,30 +287,27 @@ export default function AccountingLessonScreen() {
     handleNextQuestion();
   };
 
-  // Dev function to skip to next question
-  const handleDevSkip = () => {
-    if (lessonData && currentQuestionIndex < lessonData.data.length - 1) {
-      setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setIsQuestionAnswered(false);
+  // Handle milestone notification
+  const handleMilestoneNotification = (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => {
+    if (milestoneNotification.shouldShow && milestoneNotification.milestone) {
+      setMilestoneModal({
+        visible: true,
+        milestone: milestoneNotification.milestone,
+        message: milestoneNotification.message
+      });
     }
   };
 
-  // Dev function to go to previous question
-  const handleDevPrevious = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(currentQuestionIndex - 1);
-      setIsQuestionAnswered(false);
-    }
+  // Close milestone modal
+  const handleCloseMilestoneModal = () => {
+    setMilestoneModal(prev => ({ ...prev, visible: false }));
   };
 
-  // Dev function to go to specific question
-  const handleDevJumpTo = (index: number) => {
-    if (lessonData && index >= 0 && index < lessonData.data.length) {
-      setCurrentQuestionIndex(index);
-      setIsQuestionAnswered(false);
-    }
-  };
-
+  // 2. Pass onQuestionAnswered to each question component
   const renderQuestion = (question: AccountingQuestion) => {
     switch (question.type) {
       case 'tap-to-select':
@@ -160,6 +320,8 @@ export default function AccountingLessonScreen() {
             answer={question.answer || ''}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
@@ -172,14 +334,12 @@ export default function AccountingLessonScreen() {
             pairs={question.pairs || {}}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
       case 'categorise':
-        console.log('promt', question.prompt);
-        console.log('items', question.items);
-        console.log('categories', question.categories);
-        console.log('id', question.id);
         return (
           <CategoriseQuestion
             key={question.id}
@@ -189,6 +349,8 @@ export default function AccountingLessonScreen() {
             items={(question.items as Record<string, string>) || {}}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
@@ -202,6 +364,8 @@ export default function AccountingLessonScreen() {
             explanation={question.explanation}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
@@ -214,6 +378,8 @@ export default function AccountingLessonScreen() {
             steps={question.steps || []}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
@@ -225,6 +391,8 @@ export default function AccountingLessonScreen() {
             steps={question.steps || []}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
@@ -238,6 +406,8 @@ export default function AccountingLessonScreen() {
             correct_order={question.correct_order || []}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
+            onMilestoneNotification={handleMilestoneNotification}
+            onQuestionAnswered={handleQuestionAnswered}
           />
         );
       
@@ -253,65 +423,6 @@ export default function AccountingLessonScreen() {
           </View>
         );
     }
-  };
-
-  const renderDevControls = () => {
-    if (!__DEV__ || !lessonData) return null;
-
-    return (
-      <View style={styles.devControlsContainer}>
-        <View style={styles.devControlsRow}>
-          <Pressable
-            style={[styles.devButton, styles.devButtonSecondary]}
-            onPress={handleDevPrevious}
-            disabled={currentQuestionIndex === 0}
-          >
-            <Ionicons name="chevron-back" size={16} color={colors.primary} />
-            <ThemedText style={[styles.devButtonText, { color: colors.primary }]}>Prev</ThemedText>
-          </Pressable>
-          
-          <View style={styles.devQuestionInfo}>
-            <ThemedText style={styles.devQuestionText}>
-              {currentQuestionIndex + 1} / {lessonData.data.length}
-            </ThemedText>
-            <ThemedText style={styles.devQuestionType}>
-              {lessonData.data[currentQuestionIndex]?.type}
-            </ThemedText>
-          </View>
-          
-          <Pressable
-            style={[styles.devButton, styles.devButtonPrimary]}
-            onPress={handleDevSkip}
-            disabled={currentQuestionIndex === lessonData.data.length - 1}
-          >
-            <ThemedText style={styles.devButtonText}>Skip</ThemedText>
-            <Ionicons name="chevron-forward" size={16} color="#fff" />
-          </Pressable>
-        </View>
-        
-        {/* Quick jump buttons for first few questions */}
-        <View style={styles.devQuickJumpRow}>
-          {[0, 1, 2, 3, 4].map((index) => (
-            <Pressable
-              key={index}
-              style={[
-                styles.devQuickJumpButton,
-                currentQuestionIndex === index && styles.devQuickJumpButtonActive
-              ]}
-              onPress={() => handleDevJumpTo(index)}
-              disabled={index >= lessonData.data.length}
-            >
-              <ThemedText style={[
-                styles.devQuickJumpText,
-                currentQuestionIndex === index && styles.devQuickJumpTextActive
-              ]}>
-                {index + 1}
-              </ThemedText>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    );
   };
 
   const styles = StyleSheet.create({
@@ -456,111 +567,14 @@ export default function AccountingLessonScreen() {
       fontSize: 16,
       fontWeight: '600',
     },
-    // Dev controls styles
-    devControlsContainer: {
-      backgroundColor: isDark ? '#2A2A3A' : '#F0F0F5',
-      marginHorizontal: 16,
-      marginBottom: 16,
-      borderRadius: 12,
-      padding: 12,
-      borderWidth: 2,
-      borderColor: '#FF6B35',
-      borderStyle: 'dashed',
-    },
-    devControlsRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      marginBottom: 8,
-    },
-    devButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 8,
-      gap: 4,
-    },
-    devButtonPrimary: {
-      backgroundColor: '#FF6B35',
-    },
-    devButtonSecondary: {
-      backgroundColor: 'transparent',
-      borderWidth: 1,
-      borderColor: colors.primary,
-    },
-    devButtonText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: '#fff',
-    },
-    devQuestionInfo: {
-      alignItems: 'center',
-    },
-    devQuestionText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: '#FF6B35',
-    },
-    devQuestionType: {
-      fontSize: 10,
-      color: colors.textSecondary,
-      textTransform: 'uppercase',
-      fontWeight: '500',
-    },
-    devQuickJumpRow: {
-      flexDirection: 'row',
-      justifyContent: 'center',
-      gap: 8,
-    },
-    devQuickJumpButton: {
-      width: 32,
-      height: 32,
-      borderRadius: 16,
-      backgroundColor: isDark ? '#3A3A4A' : '#E0E0E5',
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1,
-      borderColor: 'transparent',
-    },
-    devQuickJumpButtonActive: {
-      backgroundColor: '#FF6B35',
-      borderColor: '#FF6B35',
-    },
-    devQuickJumpText: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.textSecondary,
-    },
-    devQuickJumpTextActive: {
-      color: '#fff',
-    },
   });
 
-  if (isLoading) {
+  if (isLoading || isDatabaseLoading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.headerWrapper}>
-          <View style={styles.headerCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
-              <ThemedText style={{ fontSize: 22, marginRight: 8 }}>
-                {(subtopicEmojis.subtopic_emojis as any)[subtopicName as string] || '📚'}
-              </ThemedText>
-              <ThemedText style={[styles.headerTitle, { fontSize: 15, flexShrink: 1 }]} numberOfLines={2} ellipsizeMode="tail">
-                {subtopicName}
-              </ThemedText>
-            </View>
-            <Pressable style={styles.backButton} onPress={handleBackPress} accessibilityRole="button" accessibilityLabel="Close">
-              <Ionicons name="close" size={26} color={colors.primary} />
-            </Pressable>
-          </View>
-          <View style={styles.headerShadow} />
-        </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color={colors.primary} />
-          <ThemedText style={{ marginTop: 12, color: colors.textSecondary }}>
-            Loading questions...
-          </ThemedText>
+          <ThemedText style={styles.progressText}>Loading questions...</ThemedText>
         </View>
       </SafeAreaView>
     );
@@ -571,57 +585,36 @@ export default function AccountingLessonScreen() {
       <SafeAreaView style={styles.container}>
         <View style={styles.headerWrapper}>
           <View style={styles.headerCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
-              <ThemedText style={{ fontSize: 22, marginRight: 8 }}>
-                {(subtopicEmojis.subtopic_emojis as any)[subtopicName as string] || '📚'}
-              </ThemedText>
-              <ThemedText style={[styles.headerTitle, { fontSize: 15, flexShrink: 1 }]} numberOfLines={2} ellipsizeMode="tail">
+            <Pressable style={styles.backButton} onPress={handleBackPress}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <View style={styles.headerTextContainer}>
+              <ThemedText style={styles.headerTitle}>
                 {subtopicName}
               </ThemedText>
+              <ThemedText style={styles.headerSubtitle}>
+                {levelName}
+              </ThemedText>
             </View>
-            <Pressable style={styles.backButton} onPress={handleBackPress} accessibilityRole="button" accessibilityLabel="Close">
-              <Ionicons name="close" size={26} color={colors.primary} />
-            </Pressable>
           </View>
           <View style={styles.headerShadow} />
         </View>
         <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle" size={48} color={colors.error} />
-          <ThemedText style={{ marginTop: 16, fontSize: 16, color: colors.text, textAlign: 'center' }}>
+          <Ionicons name="alert-circle-outline" size={48} color={colors.error} />
+          <ThemedText style={[styles.questionTitle, { textAlign: 'center', marginTop: 16 }]}>
             {error}
           </ThemedText>
-          <Pressable
-            style={[styles.nextButton, { marginTop: 20 }]}
-            onPress={() => router.back()}
-          >
-            <ThemedText style={styles.nextButtonText}>
-              Go Back
-            </ThemedText>
+          <Pressable style={styles.nextButton} onPress={handleBackPress}>
+            <ThemedText style={styles.nextButtonText}>Go Back</ThemedText>
           </Pressable>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (!lessonData || lessonData.data.length === 0) {
+  if (!lessonData) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.headerWrapper}>
-          <View style={styles.headerCard}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
-              <ThemedText style={{ fontSize: 22, marginRight: 8 }}>
-                {(subtopicEmojis.subtopic_emojis as any)[subtopicName as string] || '📚'}
-              </ThemedText>
-              <ThemedText style={[styles.headerTitle, { fontSize: 15, flexShrink: 1 }]} numberOfLines={2} ellipsizeMode="tail">
-                {subtopicName}
-              </ThemedText>
-            </View>
-            <Pressable style={styles.backButton} onPress={handleBackPress} accessibilityRole="button" accessibilityLabel="Close">
-              <Ionicons name="close" size={20} color={colors.primary} />
-            </Pressable>
-          </View>
-          <View style={styles.headerShadow} />
-        </View>
         <View style={styles.errorContainer}>
           <ThemedText style={{ fontSize: 16, color: colors.textSecondary, textAlign: 'center' }}>
             No questions available for this level
@@ -634,36 +627,68 @@ export default function AccountingLessonScreen() {
   const currentQuestion = lessonData.data[currentQuestionIndex];
   const progress = ((currentQuestionIndex + 1) / lessonData.data.length) * 100;
 
+  // Check if any limit is reached
+  const isAnyLimitReached = combinedLimitInfo?.daily.isLimitReached || combinedLimitInfo?.lifetime.isLimitReached;
+
+  // Fix for TypeScript index signature error
+  const emojiMap = (subtopicEmojisData as any).subtopic_emojis as Record<string, string>;
+  const subtopicEmoji = emojiMap[subtopicName as string] || '📘';
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.headerWrapper}>
-        <View style={styles.headerCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0 }}>
-            <ThemedText style={{ fontSize: 22, marginRight: 8 }}>
-              {(subtopicEmojis.subtopic_emojis as any)[subtopicName as string] || '📚'}
-            </ThemedText>
-            <ThemedText style={[styles.headerTitle, { fontSize: 15, flexShrink: 1 }]} numberOfLines={2} ellipsizeMode="tail">
-              {subtopicName}
-            </ThemedText>
-          </View>
-          <Pressable style={styles.backButton} onPress={handleBackPress} accessibilityRole="button" accessibilityLabel="Close">
-            <Ionicons name="close" size={26} color={colors.primary} />
-          </Pressable>
+    <SafeAreaView style={{ flex: 1 }}>
+      <LinearGradient
+        colors={isDark ? ['#181926', '#23243a'] : ['#F7F7FA', '#FFE3D6']}
+        style={{ flex: 1 }}
+      >
+        <View style={styles.headerWrapper}>
+          <LinearGradient
+            colors={isDark ? ['#23243a', '#181926'] : ['#fff', '#f7e7e1']}
+            style={styles.headerCard}
+          >
+            <Pressable style={styles.backButton} onPress={handleBackPress}>
+              <Ionicons name="arrow-back" size={24} color={colors.text} />
+            </Pressable>
+            <View style={styles.headerTextContainer}>
+              <ThemedText style={styles.headerTitle}>
+                <Text>{subtopicEmoji} </Text>
+                {subtopicName}
+              </ThemedText>
+              <ThemedText style={styles.headerSubtitle}>
+                {levelName}
+              </ThemedText>
+            </View>
+          </LinearGradient>
+          <View style={styles.headerShadow} />
         </View>
-        <View style={styles.headerShadow} />
-      </View>
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {renderDevControls()}
-        <View style={styles.progressContainer}>
-          <ThemedText style={styles.progressText}>
-            Question {currentQuestionIndex + 1} of {lessonData.data.length}
-          </ThemedText>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progress}%` }]} />
-          </View>
-        </View>
-        {renderQuestion(currentQuestion)}
-      </ScrollView>
+        {/* Always show the limit banner if we have info */}
+        {combinedLimitInfo && (
+          <DailyLimitBanner 
+            combinedLimitInfo={combinedLimitInfo}
+            showUpgradeButton={isAnyLimitReached}
+          />
+        )}
+        {/* Only show questions if no limit is reached */}
+        {!isAnyLimitReached && (
+          <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+            <View style={styles.progressContainer}>
+              <ThemedText style={styles.progressText}>
+                Question {currentQuestionIndex + 1} of {lessonData.data.length}
+              </ThemedText>
+              <View style={styles.progressBar}>
+                <View style={[styles.progressFill, { width: `${progress}%` }]} />
+              </View>
+            </View>
+            {renderQuestion(currentQuestion)}
+          </ScrollView>
+        )}
+        {/* Milestone Modal */}
+        <MilestoneModal
+          visible={milestoneModal.visible}
+          milestone={milestoneModal.milestone}
+          message={milestoneModal.message}
+          onClose={handleCloseMilestoneModal}
+        />
+      </LinearGradient>
     </SafeAreaView>
   );
 }

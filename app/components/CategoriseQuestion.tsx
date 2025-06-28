@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ViewStyle } from 'react-native';
+import { View, StyleSheet, Pressable, ViewStyle, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSound } from '../contexts/SoundContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import { logQuestionAnswer } from '@/services/questionReporting';
 
 // Assign a color to each category for visual feedback
 const CATEGORY_COLORS = [
@@ -30,6 +32,12 @@ interface CategoriseQuestionProps {
   items: Record<string, string>; // item -> correct category
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onMilestoneNotification?: (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => void;
+  onQuestionAnswered?: () => void;
 }
 
 // Utility function to shuffle an array
@@ -49,14 +57,18 @@ export function CategoriseQuestion({
   items,
   onContinue,
   setIsQuestionAnswered,
+  onMilestoneNotification,
+  onQuestionAnswered,
 }: CategoriseQuestionProps) {
   const { colors } = useTheme();
   const { soundEnabled } = useSound();
+  const { customerInfo } = useRevenueCat();
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [feedback, setFeedback] = useState<Record<string, boolean>>({});
   const [shuffledItemKeys, setShuffledItemKeys] = useState<string[]>([]);
+  const soundRef = React.useRef<Audio.Sound | null>(null);
 
   // Log props on component mount
   useEffect(() => {
@@ -92,6 +104,9 @@ export function CategoriseQuestion({
     console.log('🔊 Playing feedback sound:', type, 'Sound enabled:', soundEnabled);
     if (!soundEnabled) return;
     try {
+      if (soundRef.current) {
+        await soundRef.current.unloadAsync();
+      }
       const soundObject = new Audio.Sound();
       const source =
         type === 'correct'
@@ -99,9 +114,12 @@ export function CategoriseQuestion({
           : require('../../assets/audio/wrong.mp3');
       await soundObject.loadAsync(source);
       await soundObject.playAsync();
+      soundRef.current = soundObject;
+      // Unload after playback
       soundObject.setOnPlaybackStatusUpdate((status) => {
         if (status.isLoaded && status.didJustFinish) {
           soundObject.unloadAsync();
+          soundRef.current = null;
         }
       });
     } catch (e) {
@@ -145,18 +163,65 @@ export function CategoriseQuestion({
       });
       setFeedback(newFeedback);
       setIsAnswered(true);
-      // Play sound based on overall performance
+      
+      // Log the question answer
       const allCorrect = Object.values(newFeedback).every(correct => correct);
+      
+      // Handle async logging
+      const handleQuestionAnswer = async () => {
+        const result = await logQuestionAnswer(id, allCorrect, customerInfo);
+        
+        // Check if daily limit was reached
+        if (result.limitReached) {
+          Alert.alert(
+            'Daily Limit Reached',
+            'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+            [
+              { text: 'OK', onPress: () => {} }
+            ]
+          );
+          return;
+        }
+
+        // Check if lifetime limit was reached
+        if (result.lifetimeLimitReached) {
+          Alert.alert(
+            'Lifetime Limit Reached',
+            'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+            [
+              { text: 'OK', onPress: () => {} }
+            ]
+          );
+          return;
+        }
+
+        // Handle milestone notification
+        if (result.milestoneNotification && onMilestoneNotification) {
+          onMilestoneNotification(result.milestoneNotification);
+        }
+
+        // Call onQuestionAnswered after logging the answer
+        onQuestionAnswered?.();
+      };
+      
+      handleQuestionAnswer();
+      
+      // Play sound based on overall performance
       playFeedbackSound(allCorrect ? 'correct' : 'wrong');
     }
     if (!allAssigned && isAnswered) {
       setIsAnswered(false);
     }
-  }, [assignments, setIsQuestionAnswered, isAnswered, items, playFeedbackSound]);
+  }, [assignments, setIsQuestionAnswered, isAnswered, items, playFeedbackSound, onQuestionAnswered]);
 
   // Handle continue (reset)
   const handleContinue = () => {
     console.log('➡️ Continuing to next question');
+    // Stop any playing audio
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
     const initial: Record<string, string | null> = {};
     Object.keys(items).forEach(item => {
       initial[item] = null;

@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useSound } from '../contexts/SoundContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
+import { logQuestionAnswer } from '@/services/questionReporting';
 
 interface StepFlowQuestionProps {
   id: string;
@@ -18,6 +20,12 @@ interface StepFlowQuestionProps {
   }[];
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onMilestoneNotification?: (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => void;
+  onQuestionAnswered?: () => void;
 }
 
 export function StepFlowQuestion({
@@ -25,9 +33,12 @@ export function StepFlowQuestion({
   steps,
   onContinue,
   setIsQuestionAnswered,
+  onMilestoneNotification,
+  onQuestionAnswered,
 }: StepFlowQuestionProps) {
   const { colors } = useTheme();
   const { soundEnabled } = useSound();
+  const { customerInfo } = useRevenueCat();
   const [currentStep, setCurrentStep] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -131,7 +142,7 @@ export function StepFlowQuestion({
     });
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (currentStep < steps.length - 1) {
       const nextStep = currentStep + 1;
       setCurrentStep(nextStep);
@@ -140,6 +151,49 @@ export function StepFlowQuestion({
       setFeedback(stepFeedbacks[nextStep] ?? null);
     } else {
       setCompleted(true);
+      
+      // Stop any playing audio
+      if (soundRef.current) {
+        soundRef.current.unloadAsync();
+        soundRef.current = null;
+      }
+      
+      // Only log the question answer when completing the final step
+      // The outcome is correct only if all steps were answered correctly
+      const allStepsCorrect = stepResults.every(result => result === true);
+      const result = await logQuestionAnswer(id, allStepsCorrect, customerInfo);
+      
+      // Check if daily limit was reached
+      if (result.limitReached) {
+        Alert.alert(
+          'Daily Limit Reached',
+          'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Check if lifetime limit was reached
+      if (result.lifetimeLimitReached) {
+        Alert.alert(
+          'Lifetime Limit Reached',
+          'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+          [
+            { text: 'OK', onPress: () => {} }
+          ]
+        );
+        return;
+      }
+
+      // Handle milestone notification
+      if (result.milestoneNotification && onMilestoneNotification) {
+        onMilestoneNotification(result.milestoneNotification);
+      }
+      
+      // Call onQuestionAnswered after logging the answer
+      onQuestionAnswered?.();
       onContinue?.();
     }
   };

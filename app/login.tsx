@@ -96,8 +96,10 @@ export default function Login() {
           >
             <View style={styles.content}>
               <View style={styles.header}>
-                <ThemedText style={styles.title}>🏳️‍🌈 Dimpo Lingo</ThemedText>
-                <ThemedText style={styles.subtitle}>Master South Africa's rich linguistic heritage! Start your journey today 🌟</ThemedText>
+                <ThemedText style={styles.title}>🏳️‍🌈 Dimpo Accounting</ThemedText>
+                <ThemedText style={styles.subtitle}> 
+                Master Financial Statements, Ratio Analysis, and more with interactive lessons.
+                </ThemedText>
               </View>
 
               <View style={styles.form}>
@@ -148,7 +150,7 @@ export default function Login() {
 
                 <View style={styles.registerContainer}>
                   <ThemedText style={styles.helperText}>
-                    New to South African Languages? Join our community of language learners! 🌍
+                    New to Dimpo Accounting? Join our community of learners! 🌍
                   </ThemedText>
                   <TouchableOpacity
                     style={styles.createAccountButton}

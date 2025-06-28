@@ -27,7 +27,7 @@ export interface NotificationData {
 }
 
 export interface DeepLinkConfig {
-    path: '/posts/[threadId]' | '/report/[uid]' | '/(tabs)/social' | '/_auth' | '/constants' | '/forgot-password' | '/threads/[id]' | string;
+    path: '/_auth' | '/constants' | '/forgot-password' | string;
     params?: Record<string, string>;
 }
 
@@ -39,22 +39,6 @@ export function handleNotificationDeepLink(data: NotificationData): DeepLinkConf
     if (notificationData.threadId) {
         return {
             path: `/posts/${notificationData.threadId}?subjectName=${encodeURIComponent(notificationData.subjectName || '')}`,
-        };
-    }
-
-    if (notificationData.badgeName) {
-        return {
-            path: '/report/[uid]',
-            params: {
-                uid: notificationData.learnerUid || '',
-                name: notificationData.learnerName || ''
-            }
-        };
-    }
-
-    if (notificationData.followerUid) {
-        return {
-            path: '/(tabs)/social'
         };
     }
 

@@ -4,8 +4,8 @@ import RevenueCatUI from 'react-native-purchases-ui';
 
 // Replace these with your actual API keys from RevenueCat dashboard
 const REVENUECAT_API_KEYS = {
-    ios: 'appl_TiVNYAbOGyLAaxNFPaEYDYstIKO',
-    android: 'goog_msDThpJmdfRbbvfXvOdkRiHTSKr',
+    ios: 'appl_EskLlabmBUaBMaCnAPXEnvTwhae',
+    android: 'goog_YPhlITvcbrSIofAuqiKgMRcWBfM',
 };
 
 interface RevenueCatConfig {

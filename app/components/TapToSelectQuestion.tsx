@@ -1,14 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { StyleSheet, Pressable, Animated, View } from 'react-native';
+import { StyleSheet, Pressable, Animated, View, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFeedback } from '../contexts/FeedbackContext';
 import { useSound } from '../contexts/SoundContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
+import { logQuestionAnswer } from '@/services/questionReporting';
 
 interface TapToSelectQuestionProps {
   id: string;
@@ -17,8 +19,14 @@ interface TapToSelectQuestionProps {
   answer: string;
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onMilestoneNotification?: (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => void;
   emojis?: string[];
   subtext?: string;
+  onQuestionAnswered?: () => void;
 }
 
 export function TapToSelectQuestion({
@@ -28,14 +36,17 @@ export function TapToSelectQuestion({
   answer,
   onContinue,
   setIsQuestionAnswered,
+  onMilestoneNotification,
   emojis,
   subtext,
+  onQuestionAnswered,
 }: TapToSelectQuestionProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const { colors, isDark } = useTheme();
   const { setFeedback, resetFeedback } = useFeedback();
   const { soundEnabled } = useSound();
+  const { customerInfo } = useRevenueCat();
   const soundRef = React.useRef<Audio.Sound | null>(null);
   
   // Create animation values for each option
@@ -84,15 +95,47 @@ export function TapToSelectQuestion({
     };
   }, []);
 
-  const handleOptionPress = (option: string) => {
+  const handleOptionPress = async (option: string) => {
     if (isAnswered) return; // Prevent multiple selections
     
     setSelectedOption(option);
     setIsQuestionAnswered(true);
     setIsAnswered(true);
 
-    // Play sound feedback immediately
+    // Log the question answer
     const isCorrect = option === answer;
+    const result = await logQuestionAnswer(id, isCorrect, customerInfo);
+    
+    // Check if daily limit was reached
+    if (result.limitReached) {
+      Alert.alert(
+        'Daily Limit Reached',
+        'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+        [
+          { text: 'OK', onPress: () => {} }
+        ]
+      );
+      return;
+    }
+
+    // Check if lifetime limit was reached
+    if (result.lifetimeLimitReached) {
+      Alert.alert(
+        'Lifetime Limit Reached',
+        'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+        [
+          { text: 'OK', onPress: () => {} }
+        ]
+      );
+      return;
+    }
+
+    // Handle milestone notification
+    if (result.milestoneNotification && onMilestoneNotification) {
+      onMilestoneNotification(result.milestoneNotification);
+    }
+
+    // Play sound feedback immediately
     playFeedbackSound(isCorrect ? 'correct' : 'wrong');
 
     // Animate only the selected option
@@ -109,6 +152,9 @@ export function TapToSelectQuestion({
         useNativeDriver: true,
       }),
     ]).start();
+
+    // Call onQuestionAnswered after logging the answer
+    onQuestionAnswered?.();
   };
 
   const handleCheck = () => {
@@ -160,6 +206,11 @@ export function TapToSelectQuestion({
   };
 
   const handleContinue = () => {
+    // Stop any playing audio
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
     resetQuestion();
     // Call the parent's onContinue function
     onContinue?.();

@@ -91,15 +91,19 @@ export function Header() {
     ? avatarImages[learnerInfo.avatar]
     : avatarImages['default'];
 
+  const handleViewReport = () => {
+    router.push('/report');
+  };
+
   return (
     <View style={[styles.header, { paddingTop: insets.top + 8, backgroundColor: isDark ? '#1F2937' : '#F8FAFC' }]}>
       <View style={styles.row}>
         <View style={styles.greetingSection}>
           <ThemedText style={[styles.greetingText, { color: isDark ? '#F3F4F6' : '#22223B' }]}>
-            Dimpo Language <ThemedText style={styles.wave}>🇿🇦</ThemedText>
+            Dimpo Accounting <ThemedText style={styles.wave}>💰</ThemedText>
           </ThemedText>
           <ThemedText style={[styles.schoolText, { color: isDark ? '#9CA3AF' : '#64748B' }]}>
-            Learn to speak Mzansi
+            Master Accounting with interactive lessons.
           </ThemedText>
         </View>
         <TouchableOpacity onPress={() => router.push('/profile')}>
@@ -118,19 +122,23 @@ export function Header() {
           </View>
         </TouchableOpacity>
       </View>
-      <View style={[styles.card, { backgroundColor: isDark ? '#374151' : '#FFF' }]}>
-        <View style={styles.cardColumn}>
-          <MaterialCommunityIcons name="trophy-outline" size={32} color="#F59E0B" style={styles.icon} />
-          <ThemedText style={[styles.cardLabel, { color: isDark ? '#9CA3AF' : '#64748B' }]}>Your Points</ThemedText>
-          <ThemedText style={[styles.cardValue, { color: isDark ? '#60A5FA' : '#3B82F6' }]}>{learnerInfo?.points ?? 0}</ThemedText>
+      <TouchableOpacity 
+        style={[styles.reportCard, { backgroundColor: isDark ? '#374151' : '#FFF' }]}
+        onPress={handleViewReport}
+      >
+        <View style={styles.reportContent}>
+          <MaterialCommunityIcons name="chart-line" size={32} color="#3B82F6" style={styles.reportIcon} />
+          <View style={styles.reportTextContainer}>
+            <ThemedText style={[styles.reportTitle, { color: isDark ? '#F3F4F6' : '#22223B' }]}>
+              View My Report
+            </ThemedText>
+            <ThemedText style={[styles.reportSubtitle, { color: isDark ? '#9CA3AF' : '#64748B' }]}>
+              Track your learning progress
+            </ThemedText>
+          </View>
+          <MaterialCommunityIcons name="chevron-right" size={24} color={isDark ? '#9CA3AF' : '#64748B'} />
         </View>
-        <View style={[styles.divider, { backgroundColor: isDark ? '#4B5563' : '#E5E7EB' }]} />
-        <View style={styles.cardColumn}>
-          <MaterialCommunityIcons name="fire" size={32} color="#EF4444" style={styles.icon} />
-          <ThemedText style={[styles.cardLabel, { color: isDark ? '#9CA3AF' : '#64748B' }]}>Learning Streak</ThemedText>
-          <ThemedText style={[styles.cardValue, { color: isDark ? '#60A5FA' : '#3B82F6' }]}>{streakInfo?.streak ?? 0}</ThemedText>
-        </View>
-      </View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -184,41 +192,34 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
   },
-  card: {
-    flexDirection: 'row',
+  reportCard: {
     borderRadius: 18,
-    paddingVertical: 18,
-    paddingHorizontal: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 2,
+  },
+  reportContent: {
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  cardColumn: {
+  reportIcon: {
+    marginRight: 16,
+  },
+  reportTextContainer: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  icon: {
+  reportTitle: {
+    fontSize: 18,
+    fontWeight: '600',
     marginBottom: 2,
   },
-  cardLabel: {
-    fontSize: 15,
-    marginTop: 2,
-    marginBottom: 2,
+  reportSubtitle: {
+    fontSize: 14,
     fontWeight: '500',
-  },
-  cardValue: {
-    fontSize: 22,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  divider: {
-    width: 1,
-    height: 48,
-    borderRadius: 1,
   },
 }); 

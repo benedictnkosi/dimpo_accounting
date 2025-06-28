@@ -334,7 +334,7 @@ export default function OnboardingScreen() {
         if (authData && onboardingData) {
           const parsedOnboarding = JSON.parse(onboardingData);
           if (parsedOnboarding.onboardingCompleted && !router.canGoBack()) {
-            router.replace('/(tabs)');
+            router.replace('/');
           }
         }
       } catch (error) {
@@ -566,7 +566,7 @@ export default function OnboardingScreen() {
                     
                     
                     
-                    router.replace('/(tabs)');
+                    router.replace('/');
                   } catch (error) {
                     console.error('Failed to create guest account:', error);
                     Toast.show({

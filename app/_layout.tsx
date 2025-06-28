@@ -82,7 +82,7 @@ const toastConfig = {
 };
 
 function RootLayoutNav() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
 
   return (
     <AuthProvider>
@@ -93,35 +93,21 @@ function RootLayoutNav() {
             <Stack
               screenOptions={{
                 headerShown: false,
-                contentStyle: { backgroundColor: colors.background }
+                contentStyle: {
+                  backgroundColor: isDark ? colors.background : '#F7F7FA',
+                },
               }}
             >
-              <Stack.Screen name="login" options={{ headerShown: false }} />
-              <Stack.Screen name="register" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="lessons"
-                options={{
-                  headerShown: false,
-                  presentation: 'card'
-                }}
-              />
-              <Stack.Screen
-                name="accounting-lesson"
-                options={{
-                  headerShown: false,
-                  presentation: 'card'
-                }}
-              />
-
-              <Stack.Screen
-                name="profile"
-                options={{
-                  headerShown: false,
-                  presentation: 'modal'
-                }}
-              />
+              <Stack.Screen name="index" />
+              <Stack.Screen name="report" />
+              <Stack.Screen name="profile" />
+              <Stack.Screen name="accounting-lesson" />
+              <Stack.Screen name="subtopics" />
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="login" />
+              <Stack.Screen name="register" />
+              <Stack.Screen name="forgot-password" />
+              <Stack.Screen name="onboarding" />
             </Stack>
             <Toast config={toastConfig} />
           </FeedbackProvider>
@@ -194,22 +180,27 @@ export default function RootLayout() {
           }
         );
 
-        // Cleanup listeners on unmount
-        return () => {
-          if (notificationListener.current) {
-            Notifications.removeNotificationSubscription(notificationListener.current);
-          }
-          if (responseListener.current) {
-            Notifications.removeNotificationSubscription(responseListener.current);
-          }
-        };
+        //console.log('[Notifications] Notification listeners set up successfully');
       } catch (error) {
         console.error('[Notifications] Error initializing notifications:', error);
       }
     }
 
-    initializeNotifications();
-  }, []);
+    // Initialize notifications after fonts are loaded
+    if (loaded) {
+      initializeNotifications();
+    }
+
+    // Cleanup notification listeners on unmount
+    return () => {
+      if (notificationListener.current) {
+        Notifications.removeNotificationSubscription(notificationListener.current);
+      }
+      if (responseListener.current) {
+        Notifications.removeNotificationSubscription(responseListener.current);
+      }
+    };
+  }, [loaded]);
 
   if (!loaded) {
     return null;

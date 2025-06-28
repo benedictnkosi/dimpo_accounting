@@ -1,14 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Pressable, View } from 'react-native';
+import { StyleSheet, Pressable, View, Alert } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useFeedback } from '../contexts/FeedbackContext';
 import { useSound } from '../contexts/SoundContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import CheckContinueButton from './CheckContinueButton';
+import { logQuestionAnswer } from '@/services/questionReporting';
 
 interface MatchingQuestionProps {
   id: string;
@@ -16,6 +18,12 @@ interface MatchingQuestionProps {
   pairs: Record<string, string>;
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onMilestoneNotification?: (milestoneNotification: {
+    shouldShow: boolean;
+    milestone: '75' | '50' | '25' | null;
+    message: string;
+  }) => void;
+  onQuestionAnswered?: () => void;
 }
 
 interface MatchCard {
@@ -46,6 +54,8 @@ export function MatchingQuestion({
   pairs,
   onContinue,
   setIsQuestionAnswered,
+  onMilestoneNotification,
+  onQuestionAnswered,
 }: MatchingQuestionProps) {
   const [cards, setCards] = useState<MatchCard[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -54,6 +64,7 @@ export function MatchingQuestion({
   const { colors, isDark } = useTheme();
   const { setFeedback, resetFeedback } = useFeedback();
   const { soundEnabled } = useSound();
+  const { customerInfo } = useRevenueCat();
   const soundRef = React.useRef<Audio.Sound | null>(null);
 
   // Play feedback sound function
@@ -125,7 +136,7 @@ export function MatchingQuestion({
     setCards([...keyCards, ...valueCards]);
   }, [pairs]);
 
-  const handleCardPress = (cardId: string) => {
+  const handleCardPress = async (cardId: string) => {
     if (isAnswered) return;
 
     const card = cards.find(c => c.id === cardId);
@@ -178,6 +189,39 @@ export function MatchingQuestion({
         if (allMatched) {
           setAllMatched(true);
           setIsQuestionAnswered(true);
+          
+          // Log the question answer
+          const result = await logQuestionAnswer(id, true, customerInfo);
+          
+          // Check if daily limit was reached
+          if (result.limitReached) {
+            Alert.alert(
+              'Daily Limit Reached',
+              'You\'ve reached your daily question limit. Upgrade to Premium for unlimited questions!',
+              [
+                { text: 'OK', onPress: () => {} }
+              ]
+            );
+            return;
+          }
+
+          // Check if lifetime limit was reached
+          if (result.lifetimeLimitReached) {
+            Alert.alert(
+              'Lifetime Limit Reached',
+              'You\'ve used all your free questions. Upgrade to Premium for unlimited access!',
+              [
+                { text: 'OK', onPress: () => {} }
+              ]
+            );
+            return;
+          }
+
+          // Handle milestone notification
+          if (result.milestoneNotification && onMilestoneNotification) {
+            onMilestoneNotification(result.milestoneNotification);
+          }
+          
           // Set feedback for correct completion
           setFeedback({
             isChecked: true,
@@ -186,6 +230,9 @@ export function MatchingQuestion({
             correctAnswer: Object.entries(pairs).map(([item, category]) => `${item}: ${category}`).join(', '),
             questionId: id,
           });
+
+          // Call onQuestionAnswered after logging the answer
+          onQuestionAnswered?.();
         }
       } else {
         // Invalid match - play wrong sound and deselect first card
@@ -198,6 +245,11 @@ export function MatchingQuestion({
   };
 
   const handleContinue = () => {
+    // Stop any playing audio
+    if (soundRef.current) {
+      soundRef.current.unloadAsync();
+      soundRef.current = null;
+    }
     onContinue?.();
   };
 

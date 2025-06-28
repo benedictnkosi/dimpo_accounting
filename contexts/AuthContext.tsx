@@ -92,14 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const inRegisterScreen = segments.join('/') === 'register';
     const inForgotPasswordScreen = segments.join('/') === 'forgot-password';
     const inOnboardingScreen = segments.join('/') === 'onboarding';
-    const inTabsGroup = segments[0] === '(tabs)';
 
     if (!user && !inLoginScreen && !inRegisterScreen && !inForgotPasswordScreen && !inOnboardingScreen) {
       router.replace('/login');
     } else if (user && (inAuthGroup || inLoginScreen || inRegisterScreen || inForgotPasswordScreen)) {
-      router.replace('/(tabs)');
-    } else if (!user && inTabsGroup) {
-      router.replace('/login');
+      router.replace('/');
     }
   }, [user, isLoading, segments]);
 
