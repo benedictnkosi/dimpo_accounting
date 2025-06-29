@@ -17,14 +17,10 @@ import topicEmojis from '@/assets/topic_emojis.json';
 // Helper function to get unique main topics from database
 const getUniqueMainTopics = async (): Promise<string[]> => {
   try {
-    console.log('[getUniqueMainTopics] Fetching all topics from database...');
     const topics = await getAllTopics();
-    console.log('[getUniqueMainTopics] Raw topics from database:', topics);
     const uniqueMainTopics = [...new Set(topics.map(topic => topic.main_topic))];
-    console.log('[getUniqueMainTopics] Unique main topics:', uniqueMainTopics);
     return uniqueMainTopics.sort();
   } catch (error) {
-    console.error('[getUniqueMainTopics] Error getting unique main topics:', error);
     throw error;
   }
 };
@@ -32,14 +28,36 @@ const getUniqueMainTopics = async (): Promise<string[]> => {
 // Helper function to get subtopics for a specific main topic
 const getSubtopicsForMainTopic = async (mainTopic: string): Promise<string[]> => {
   try {
-    console.log('[getSubtopicsForMainTopic] Fetching subtopics for:', mainTopic);
     const topics = await getTopicsByMainTopic(mainTopic);
-    console.log('[getSubtopicsForMainTopic] Raw topics for', mainTopic, ':', topics);
     const subtopics = topics.map(topic => topic.sub_topic).sort();
-    console.log('[getSubtopicsForMainTopic] Subtopics for', mainTopic, ':', subtopics);
     return subtopics;
   } catch (error) {
-    console.error('[getSubtopicsForMainTopic] Error getting subtopics for main topic:', error);
+    throw error;
+  }
+};
+
+// Helper function to get all subtopics from database
+const getAllSubtopics = async (): Promise<{ main_topic: string; sub_topic: string }[]> => {
+  try {
+    const topics = await getAllTopics();
+    
+    // Extract main topic and subtopic pairs
+    const subtopics = topics.map(topic => ({
+      main_topic: topic.main_topic,
+      sub_topic: topic.sub_topic
+    }));
+    
+    // Group by main topic for better readability
+    const groupedSubtopics = subtopics.reduce((acc, curr) => {
+      if (!acc[curr.main_topic]) {
+        acc[curr.main_topic] = [];
+      }
+      acc[curr.main_topic].push(curr.sub_topic);
+      return acc;
+    }, {} as Record<string, string[]>);
+    
+    return subtopics;
+  } catch (error) {
     throw error;
   }
 };
@@ -113,18 +131,18 @@ export default function HomeScreen() {
   useEffect(() => {
     const loadTopics = async () => {
       if (!isInitialized) {
-        console.log('[HomeScreen] Database not initialized yet, waiting...');
         return; // Wait for database to be initialized
       }
 
       try {
-        console.log('[HomeScreen] Database initialized, loading topics...');
         setIsLoading(true);
         setError(null);
 
         // Get unique main topics from database
         const mainTopicNames = await getUniqueMainTopics();
-        console.log('[HomeScreen] Retrieved main topics:', mainTopicNames);
+        
+        // Log all subtopics from database
+        await getAllSubtopics();
         
         // Convert to Topic format
         const mainTopics: Topic[] = mainTopicNames.map((topicName, index) => ({
@@ -132,11 +150,9 @@ export default function HomeScreen() {
           name: topicName
         }));
 
-        console.log('[HomeScreen] Converted to Topic format:', mainTopics);
         setTopics(mainTopics);
         setIsLoading(false);
       } catch (error) {
-        console.error('[HomeScreen] Error loading topics from database:', error);
         setError('Failed to load topics from database');
         setIsLoading(false);
       }
@@ -193,7 +209,6 @@ export default function HomeScreen() {
 
       return subtopics;
     } catch (error) {
-      console.error('Error fetching subtopics from database:', error);
       throw error;
     }
   };
@@ -205,9 +220,6 @@ export default function HomeScreen() {
       
       // Fetch subtopics from database
       const subtopics = await fetchSubtopicsFromDatabase(topic.name);
-
-      // Log the subtopics for debugging
-      console.log('Subtopics for topic', topic.name, subtopics);
 
       // Track topic selection
       analytics.track('accounting_topic_selected', {
@@ -226,7 +238,6 @@ export default function HomeScreen() {
         }
       });
     } catch (error) {
-      console.error('Error fetching subtopics from database:', error);
       setError('Failed to load subtopics. Please try again.');
     } finally {
       setIsLoading(false);
@@ -249,7 +260,7 @@ export default function HomeScreen() {
         title: 'Dimpo Accounting App',
       });
     } catch (error) {
-      console.error('Error sharing app:', error);
+      // Error handling for share functionality
     }
   };
 

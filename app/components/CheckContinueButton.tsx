@@ -26,29 +26,7 @@ export function FeedbackMessage({ onContinue }: { onContinue: () => void }) {
 
     if (!isChecked) return null;
 
-    async function handleReport() {
-        setIsReporting(true);
-        setReportStatus(null);
-        try {
-            const url = `${HOST_URL}/api/language-questions/${questionId}/report`;
-            //console.log('Reporting question', url);
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-            });
-            if (res.ok) {
-                setReportStatus('Reported!');
-                onContinue();
-            } else {
-                setReportStatus('Failed to report');
-            }
-        } catch (e) {
-            setReportStatus('Failed to report');
-        } finally {
-            setIsReporting(false);
-            setTimeout(() => setReportStatus(null), 2000);
-        }
-    }
+    
 
     return (
         <View style={styles.feedbackContainerRow}>
@@ -65,14 +43,7 @@ export function FeedbackMessage({ onContinue }: { onContinue: () => void }) {
                     <ThemedText style={[styles.reportStatus, { color: colors.success }]}>{reportStatus}</ThemedText>
                 )}
             </View>
-            <Pressable
-                onPress={handleReport}
-                disabled={isReporting}
-                accessibilityLabel="Flag this question"
-                style={styles.flagButton}
-            >
-                <ThemedText style={{ fontSize: 22, marginLeft: 8 }}>🚩</ThemedText>
-            </Pressable>
+            
         </View>
     );
 }

@@ -71,9 +71,8 @@ export default function SubtopicsScreen() {
     try {
       const storageKey = getUnlockModalStorageKey(topicId, subtopicId, levelIndex);
       await AsyncStorage.setItem(storageKey, 'true');
-      console.log('💾 [DEBUG] Saved unlock modal state to storage:', storageKey);
     } catch (error) {
-      console.error('💾 [DEBUG] Error saving unlock modal state:', error);
+      // Silently handle storage error
     }
   };
 
@@ -84,7 +83,6 @@ export default function SubtopicsScreen() {
       const hasBeenShown = await AsyncStorage.getItem(storageKey);
       return hasBeenShown === 'true';
     } catch (error) {
-      console.error('💾 [DEBUG] Error checking unlock modal state:', error);
       return false;
     }
   };
@@ -131,7 +129,7 @@ export default function SubtopicsScreen() {
       useCase: 'Prep for complex examples',
     },
     'Level 4: Expert': {
-      goal: 'Solve integrated exam-style problems with distractors or time pressure',
+      goal: 'Solve integrated exam-style problems with distractors',
       useCase: 'Exam prep, confident learners',
     },
   };
@@ -146,25 +144,18 @@ export default function SubtopicsScreen() {
 
   // Function to determine if a level should be unlocked
   const isLevelUnlocked = (subtopicId: string, levelIndex: number): boolean => {
-    console.log(`🔓 [DEBUG] isLevelUnlocked called for subtopic ${subtopicId}, level ${levelIndex}`);
-    
     // Level 0 is always unlocked
     if (levelIndex === 0) {
-      const completionStatus = levelCompletionStatus[subtopicId];
-      console.log(`🔓 [DEBUG] Level ${levelIndex} unlocked: ${!completionStatus ? 'no completion status' : 'level 0 (always unlocked)'}`);
       return true;
     }
 
     const completionStatus = levelCompletionStatus[subtopicId];
-    console.log(`🔓 [DEBUG] Completion status for subtopic ${subtopicId}:`, completionStatus);
 
     // Check if all previous levels meet the unlock criteria
     for (let i = 0; i < levelIndex; i++) {
       const previousLevel = completionStatus?.[i];
-      console.log(`🔓 [DEBUG] Checking previous level ${i}:`, previousLevel);
 
       if (!previousLevel) {
-        console.log(`🔓 [DEBUG] Level ${levelIndex} locked: no data for previous level ${i}`);
         return false;
       }
 
@@ -172,29 +163,19 @@ export default function SubtopicsScreen() {
       const accuracy = totalAnswered > 0 ? (previousLevel.correctly_answered_questions / totalAnswered) * 100 : 0;
       const meetsUnlockCriteria = totalAnswered >= 9 && accuracy >= 80;
 
-      console.log(`🔓 [DEBUG] Level ${i} stats: ${totalAnswered} answered, ${accuracy.toFixed(1)}% accuracy`);
-      console.log(`🔓 [DEBUG] Level ${i} meets unlock criteria: ${meetsUnlockCriteria} (need 9+ answers and 80%+ accuracy)`);
-
       if (!meetsUnlockCriteria) {
-        console.log(`🔓 [DEBUG] Level ${levelIndex} locked: previous level ${i} doesn't meet criteria`);
         return false;
       }
     }
 
-    console.log(`🔓 [DEBUG] Level ${levelIndex} unlocked: all previous levels meet criteria`);
     return true;
   };
 
   // Function to log question counts per subtopic
   const logQuestionCountsPerSubtopic = useCallback(async () => {
     if (!isInitialized || !topic) {
-      console.log('📊 [DEBUG] logQuestionCountsPerSubtopic: Not initialized or no topic');
       return;
     }
-
-    console.log('📊 [DEBUG] ===== QUESTION COUNTS PER SUBTOPIC =====');
-    console.log('📊 [DEBUG] Topic:', topic.name);
-    console.log('📊 [DEBUG] Total Subtopics:', topic.subtopics.length);
 
     try {
       // Get all topics from the database
@@ -211,11 +192,8 @@ export default function SubtopicsScreen() {
 
       // Log question counts for each subtopic
       for (const subtopic of topic.subtopics) {
-        console.log(`📊 [DEBUG] --- ${subtopic.name} ---`);
-        
         const topicId = topicIdMap.get(subtopic.name);
         if (!topicId) {
-          console.log(`📊 [DEBUG] ❌ No database topic found for subtopic: ${subtopic.name}`);
           continue;
         }
 
@@ -227,37 +205,24 @@ export default function SubtopicsScreen() {
             const questions = await getQuestionsByTopicAndLevel(topicId, levelName);
             const questionCount = questions.length;
             subtopicTotalQuestions += questionCount;
-            
-            console.log(`📊 [DEBUG]   ${levelName}: ${questionCount} questions`);
           } catch (error) {
-            console.log(`📊 [DEBUG]   ${levelName}: Error getting questions - ${error}`);
+            // Silently handle error
           }
         }
         
-        console.log(`📊 [DEBUG]   📈 Total questions in ${subtopic.name}: ${subtopicTotalQuestions}`);
         totalQuestionsInTopic += subtopicTotalQuestions;
-        console.log(`📊 [DEBUG]   `);
       }
 
-      console.log(`📊 [DEBUG] ===== SUMMARY =====`);
-      console.log(`📊 [DEBUG] Total questions in topic "${topic.name}": ${totalQuestionsInTopic}`);
-      console.log(`📊 [DEBUG] Average questions per subtopic: ${Math.round(totalQuestionsInTopic / topic.subtopics.length)}`);
-      console.log(`📊 [DEBUG] ========================`);
-
     } catch (error) {
-      console.error('📊 [DEBUG] Error logging question counts:', error);
+      // Silently handle error
     }
   }, [isInitialized, topic]);
 
   // Load level completion status for all subtopics
   const loadLevelCompletionStatus = useCallback(async () => {
     if (!isInitialized || !topic) {
-      console.log('📊 [DEBUG] loadLevelCompletionStatus: Not initialized or no topic');
       return;
     }
-
-    console.log('📊 [DEBUG] loadLevelCompletionStatus: Starting to load completion status...');
-    console.log('📊 [DEBUG] Topic:', topic.name, 'Subtopics:', topic.subtopics.length);
 
     // Log question counts per subtopic
     await logQuestionCountsPerSubtopic();
@@ -274,7 +239,6 @@ export default function SubtopicsScreen() {
 
       // Get all topics from the database
       const allTopics = await getAllTopics();
-      console.log('📊 [DEBUG] All topics from database:', allTopics.length);
       
       // Create a mapping of subtopic names to topic IDs
       const topicIdMap = new Map<string, number>();
@@ -283,12 +247,8 @@ export default function SubtopicsScreen() {
         topicIdMap.set(dbTopic.sub_topic, dbTopic.id);
       }
 
-      console.log('📊 [DEBUG] Topic ID mapping:', Object.fromEntries(topicIdMap));
-
       // Load completion status for each subtopic
       for (const subtopic of topic.subtopics) {
-        console.log(`📊 [DEBUG] Processing subtopic: ${subtopic.name}`);
-        
         // Find the topic ID for this subtopic by matching the subtopic name
         const topicId = topicIdMap.get(subtopic.name);
         
@@ -296,7 +256,6 @@ export default function SubtopicsScreen() {
           try {
             const status = await getLevelCompletionStatus(topicId);
             statusMap[subtopic.id] = status;
-            console.log(`📊 [DEBUG] Loaded status for ${subtopic.name}:`, status);
             
             // Check for incorrect questions for each level
             const incorrectLevels: string[] = [];
@@ -307,83 +266,58 @@ export default function SubtopicsScreen() {
               }
             }
             incorrectMap[subtopic.id] = incorrectLevels;
-            console.log(`📊 [DEBUG] Incorrect questions for ${subtopic.name}:`, incorrectLevels);
             
-            // console.log(`Loaded completion status for subtopic ${subtopic.name} (ID: ${subtopic.id}) with topic ID ${topicId}:`, status);
           } catch (error) {
-            console.error(`📊 [DEBUG] Error loading completion status for subtopic ${subtopic.id}:`, error);
             statusMap[subtopic.id] = [];
             incorrectMap[subtopic.id] = [];
           }
         } else {
-          console.log(`📊 [DEBUG] No topic ID found for subtopic "${subtopic.name}" (ID: ${subtopic.id})`);
           statusMap[subtopic.id] = [];
           incorrectMap[subtopic.id] = [];
         }
       }
 
-      console.log('📊 [DEBUG] Final status map:', JSON.stringify(statusMap, null, 2));
       setLevelCompletionStatus(statusMap);
       setIncorrectQuestions(incorrectMap);
 
     } catch (error) {
-      console.error('📊 [DEBUG] Error loading level completion status:', error);
+      // Silently handle error
     }
   }, [isInitialized, topic, logQuestionCountsPerSubtopic]);
 
   // Check for newly unlocked levels and show modal
   const checkForNewlyUnlockedLevels = useCallback(async () => {
     if (!topic) {
-      console.log('🔍 [DEBUG] checkForNewlyUnlockedLevels: No topic available');
       return;
     }
-
-    console.log('🔍 [DEBUG] checkForNewlyUnlockedLevels: Starting check...');
-    console.log('🔍 [DEBUG] Current levelCompletionStatus:', JSON.stringify(levelCompletionStatus, null, 2));
 
     const currentUnlockedLevels: Record<string, Set<number>> = {};
     
     // Calculate currently unlocked levels
     for (const subtopic of topic.subtopics) {
       currentUnlockedLevels[subtopic.id] = new Set();
-      console.log(`🔍 [DEBUG] Checking subtopic: ${subtopic.name} (ID: ${subtopic.id})`);
       
       for (let i = 0; i < subtopic.levels.length; i++) {
         const isUnlocked = isLevelUnlocked(subtopic.id, i);
-        console.log(`🔍 [DEBUG] Level ${i} (${subtopic.levels[i].name}): unlocked = ${isUnlocked}`);
         
         if (isUnlocked) {
           currentUnlockedLevels[subtopic.id].add(i);
         }
       }
-      
-      console.log(`🔍 [DEBUG] Currently unlocked levels for ${subtopic.name}:`, Array.from(currentUnlockedLevels[subtopic.id]));
     }
-
-    console.log('🔍 [DEBUG] Previous unlocked levels:', JSON.stringify(
-      Object.fromEntries(
-        Object.entries(previousUnlockedLevels).map(([key, value]) => [key, Array.from(value)])
-      ), null, 2
-    ));
 
     // Check for newly unlocked levels
     for (const subtopic of topic.subtopics) {
       const previousUnlocked = previousUnlockedLevels[subtopic.id] || new Set();
       const currentlyUnlocked = currentUnlockedLevels[subtopic.id] || new Set();
 
-      console.log(`🔍 [DEBUG] Comparing ${subtopic.name}:`);
-      console.log(`  Previous: ${Array.from(previousUnlocked)}`);
-      console.log(`  Current: ${Array.from(currentlyUnlocked)}`);
-
       // Find newly unlocked levels
       for (const levelIndex of currentlyUnlocked) {
         if (!previousUnlocked.has(levelIndex) && levelIndex > 0) { // Skip Level 1 as it's always unlocked
-          console.log(`🎉 [DEBUG] NEW LEVEL UNLOCKED! Subtopic: ${subtopic.name}, Level: ${levelIndex} (${subtopic.levels[levelIndex].name})`);
           
           // Check if we've already shown the modal for this specific level
           const hasBeenShown = await hasUnlockModalBeenShown(topicId as string, subtopic.id, levelIndex);
           if (hasBeenShown) {
-            console.log(`🎭 [DEBUG] Modal already shown for ${subtopic.name} Level ${levelIndex}, skipping`);
             continue;
           }
           
@@ -399,15 +333,6 @@ export default function SubtopicsScreen() {
           
           // Save the state to AsyncStorage
           await saveUnlockModalState(topicId as string, subtopic.id, levelIndex);
-          
-          console.log('🎉 [DEBUG] Modal state set - unlockedLevel:', {
-            topicId: topicId as string,
-            subtopicId: subtopic.id,
-            levelIndex: levelIndex,
-            subtopicName: subtopic.name,
-            levelName: subtopic.levels[levelIndex].name
-          });
-          console.log('🎉 [DEBUG] Modal visibility set to: true');
           
           // Track the unlock event
           analytics.track('level_unlocked', {
@@ -426,43 +351,23 @@ export default function SubtopicsScreen() {
 
     // Update the previous unlocked levels reference
     setPreviousUnlockedLevels(currentUnlockedLevels);
-    console.log('🔍 [DEBUG] Updated previous unlocked levels:', JSON.stringify(
-      Object.fromEntries(
-        Object.entries(previousUnlockedLevels).map(([key, value]) => [key, Array.from(value)])
-      ), null, 2
-    ));
   }, [topic, topicId, topicName, levelCompletionStatus]);
 
   // Use useFocusEffect to reload progress when screen is focused
   useFocusEffect(
     useCallback(() => {
-      console.log('🔄 [DEBUG] Screen focused - reloading level completion status');
       loadLevelCompletionStatus();
     }, [loadLevelCompletionStatus])
   );
 
   // Check for newly unlocked levels after completion status is loaded
   useEffect(() => {
-    console.log('📊 [DEBUG] levelCompletionStatus changed:', Object.keys(levelCompletionStatus).length, 'subtopics loaded');
     if (Object.keys(levelCompletionStatus).length > 0) {
-      console.log('🔍 [DEBUG] Triggering checkForNewlyUnlockedLevels');
       checkForNewlyUnlockedLevels().catch(error => {
-        console.error('🔍 [DEBUG] Error in checkForNewlyUnlockedLevels:', error);
+        // Silently handle error
       });
     }
   }, [levelCompletionStatus, checkForNewlyUnlockedLevels]);
-
-  // Debug modal state changes
-  useEffect(() => {
-    console.log('🎭 [DEBUG] Modal state changed:');
-    console.log('  visible:', levelUnlockModalVisible);
-    console.log('  unlockedLevel:', unlockedLevel);
-  }, [levelUnlockModalVisible, unlockedLevel]);
-
-  // Debug render cycle
-  useEffect(() => {
-    console.log('🎭 [DEBUG] About to render LevelUnlockModal:', { levelUnlockModalVisible, unlockedLevel });
-  });
 
   useEffect(() => {
     const loadTopic = async () => {
@@ -474,7 +379,7 @@ export default function SubtopicsScreen() {
           try {
             parsedSubtopics = JSON.parse(subtopics);
           } catch (parseError) {
-            console.error('Error parsing subtopics:', parseError);
+            // Silently handle parse error
           }
         }
 
@@ -488,7 +393,6 @@ export default function SubtopicsScreen() {
         setTopic(topicData);
         setIsLoading(false);
       } catch (error) {
-        console.error('Error loading topic:', error);
         setIsLoading(false);
       }
     };
@@ -514,16 +418,6 @@ export default function SubtopicsScreen() {
   const handleLevelPress = async (subtopic: Subtopic, level: Level) => {
     if (!level.unlocked) return; // Don't allow clicking locked levels
     
-    console.log('🎯 [DEBUG] User starting to answer questions:');
-    console.log('  Topic:', topicName);
-    console.log('  Subtopic:', subtopic.name);
-    console.log('  Level:', level.name);
-    console.log('  Current unlocked levels state:', JSON.stringify(
-      Object.fromEntries(
-        Object.entries(previousUnlockedLevels).map(([key, value]) => [key, Array.from(value)])
-      ), null, 2
-    ));
-    
     analytics.track('accounting_level_selected', {
       topic_id: topicId,
       topic_name: topicName,
@@ -542,7 +436,7 @@ export default function SubtopicsScreen() {
         databaseTopicId = topicRecord.id.toString();
       }
     } catch (error) {
-      console.error('Error finding database topic ID:', error);
+      // Silently handle error
     }
 
     // Navigate to accounting lesson screen with level info
@@ -578,7 +472,7 @@ export default function SubtopicsScreen() {
         databaseTopicId = topicRecord.id.toString();
       }
     } catch (error) {
-      console.error('Error finding database topic ID:', error);
+      // Silently handle error
     }
 
     // Navigate to accounting lesson screen with retry mode enabled
@@ -1043,7 +937,6 @@ export default function SubtopicsScreen() {
       <LevelUnlockModal
         visible={levelUnlockModalVisible}
         onDismiss={() => {
-          console.log('🎭 [DEBUG] Modal dismissed');
           setLevelUnlockModalVisible(false);
         }}
         unlockedLevel={unlockedLevel}

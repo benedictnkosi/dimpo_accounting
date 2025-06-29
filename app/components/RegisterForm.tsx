@@ -2,6 +2,7 @@ import { ThemedText } from '@/components/ThemedText';
 import { HOST_URL } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { analytics } from '@/services/analytics';
+import { completeDeviceRegistration } from '@/services/deviceRegistration';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
@@ -28,6 +29,13 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>(defaultMethod);
     const { signUp } = useAuth();
+
+    // Refs for keyboard navigation
+    const nameRef = React.useRef<TextInput>(null);
+    const emailRef = React.useRef<TextInput>(null);
+    const phoneRef = React.useRef<TextInput>(null);
+    const passwordRef = React.useRef<TextInput>(null);
+    const confirmPasswordRef = React.useRef<TextInput>(null);
 
     // Track page view when component mounts
     useEffect(() => {
@@ -181,6 +189,20 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
             // Store auth token
             await SecureStore.setItemAsync('auth', JSON.stringify({ user }));
 
+            // Register device with the server
+            try {
+                const deviceRegistrationResult = await completeDeviceRegistration(user.uid);
+                if (deviceRegistrationResult.success) {
+                    console.log('[RegisterForm] Device registered successfully:', deviceRegistrationResult.deviceId);
+                } else {
+                    console.warn('[RegisterForm] Device registration failed:', deviceRegistrationResult.message);
+                    // Don't block the registration flow if device registration fails
+                }
+            } catch (deviceError) {
+                console.error('[RegisterForm] Error during device registration:', deviceError);
+                // Don't block the registration flow if device registration fails
+            }
+
             await logAnalyticsEvent('register_success', {
                 user_id: user.uid,
                 email: userEmail,
@@ -249,13 +271,14 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
         <KeyboardAvoidingView 
             style={styles.keyboardAvoidingView}
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
         >
             <ScrollView 
                 style={styles.scrollView}
                 contentContainerStyle={styles.scrollViewContent}
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
+                automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             >
                 <View style={styles.container} testID="register-form-container">
                     <View style={styles.registrationMethodContainer}>
@@ -296,6 +319,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                     </View>
 
                     <TextInput
+                        ref={nameRef}
                         style={styles.input}
                         placeholder="Name"
                         placeholderTextColor="#94A3B8"
@@ -304,11 +328,20 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                         testID="name-input"
                         maxLength={50}
                         accessibilityLabel="Full name input"
+                        returnKeyType="next"
+                        onSubmitEditing={() => {
+                            if (registrationMethod === 'email') {
+                                emailRef.current?.focus();
+                            } else {
+                                phoneRef.current?.focus();
+                            }
+                        }}
                     />
 
                     {registrationMethod === 'email' ? (
                         <>
                             <TextInput
+                                ref={emailRef}
                                 style={styles.input}
                                 placeholder="Email"
                                 placeholderTextColor="#94A3B8"
@@ -319,6 +352,8 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                                 testID="email-input"
                                 maxLength={50}
                                 accessibilityLabel="Email input"
+                                returnKeyType="next"
+                                onSubmitEditing={() => passwordRef.current?.focus()}
                             />
                             <TouchableOpacity
                                 onPress={handleCreateGmail}
@@ -332,6 +367,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                         </>
                     ) : (
                         <TextInput
+                            ref={phoneRef}
                             style={styles.input}
                             placeholder="Phone Number (10 digits)"
                             placeholderTextColor="#94A3B8"
@@ -341,12 +377,15 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                             testID="phone-input"
                             maxLength={10}
                             accessibilityLabel="Phone number input"
+                            returnKeyType="next"
+                            onSubmitEditing={() => passwordRef.current?.focus()}
                         />
                     )}
 
                     <View style={styles.inputContainer}>
                         <View style={styles.passwordContainer}>
                             <TextInput
+                                ref={passwordRef}
                                 style={[styles.input, styles.passwordInput]}
                                 placeholder="Password"
                                 placeholderTextColor="#94A3B8"
@@ -356,6 +395,8 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                                 testID="password-input"
                                 maxLength={50}
                                 accessibilityLabel="Password input"
+                                returnKeyType="next"
+                                onSubmitEditing={() => confirmPasswordRef.current?.focus()}
                             />
                             <TouchableOpacity
                                 style={styles.eyeIcon}
@@ -372,6 +413,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                     </View>
                     <View style={styles.passwordContainer}>
                         <TextInput
+                            ref={confirmPasswordRef}
                             style={[styles.input, styles.passwordInput]}
                             placeholder="Confirm Password"
                             placeholderTextColor="#94A3B8"
@@ -381,6 +423,8 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                             testID="confirm-password-input"
                             maxLength={50}
                             accessibilityLabel="Confirm password input"
+                            returnKeyType="done"
+                            onSubmitEditing={handleRegister}
                         />
                         <TouchableOpacity
                             style={styles.eyeIcon}
@@ -424,8 +468,8 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollViewContent: {
-        flexGrow: 1,
         paddingVertical: 20,
+        paddingBottom: 100,
     },
     registrationMethodContainer: {
         flexDirection: 'row',

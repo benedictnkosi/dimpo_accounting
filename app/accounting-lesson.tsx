@@ -20,7 +20,6 @@ import { CombinedLimitInfo } from '@/services/lifetimeStats';
 // Import question components
 import { TapToSelectQuestion } from './components/TapToSelectQuestion';
 import { CategoriseQuestion } from './components/CategoriseQuestion';
-import { MatchingQuestion } from './components/MatchingQuestion';
 import { TrueFalseQuestion } from './components/TrueFalseQuestion';
 import { MultiStepQuestion } from './components/MultiStepQuestion';
 import { StepFlowQuestion } from './components/StepFlowQuestion';
@@ -270,7 +269,6 @@ export default function AccountingLessonScreen() {
                 level_id: levelId,
                 level_name: levelName
               });
-              console.log(`Level ${levelName} completed!`);
             }
           }
         }
@@ -324,20 +322,7 @@ export default function AccountingLessonScreen() {
             onQuestionAnswered={handleQuestionAnswered}
           />
         );
-      
-      case 'matching':
-        return (
-          <MatchingQuestion
-            key={question.id}
-            id={question.id}
-            prompt={question.prompt}
-            pairs={question.pairs || {}}
-            onContinue={handleContinue}
-            setIsQuestionAnswered={setIsQuestionAnswered}
-            onMilestoneNotification={handleMilestoneNotification}
-            onQuestionAnswered={handleQuestionAnswered}
-          />
-        );
+
       
       case 'categorise':
         return (
@@ -480,13 +465,13 @@ export default function AccountingLessonScreen() {
       justifyContent: 'center',
     },
     headerTitle: {
-      fontSize: 21,
-      fontWeight: '700',
+      fontSize: 16,
+      fontWeight: '600',
       color: colors.text,
       letterSpacing: 0.1,
     },
     headerSubtitle: {
-      fontSize: 15,
+      fontSize: 14,
       color: colors.textSecondary,
       marginTop: 2,
       fontWeight: '500',

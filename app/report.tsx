@@ -76,14 +76,11 @@ export default function ReportScreen() {
         setIsLoading(true);
         setError(null);
 
-        // Log all data in the results table (question_report)
+        // Get all question reports data (for internal use)
         try {
-          const allReports = await getAllQuestionReports();
-          console.log('=== ALL question_report DATA ===');
-          console.log(JSON.stringify(allReports, null, 2));
-          console.log('=== END question_report DATA ===');
+          await getAllQuestionReports();
         } catch (e) {
-          console.warn('Could not log question_report table:', e);
+          // Silently handle error for question reports
         }
 
         const [stats, mainTopics, subtopics, activity] = await Promise.all([
@@ -93,21 +90,12 @@ export default function ReportScreen() {
           getRecentActivity(7)
         ]);
 
-        // Debug logs to show all results
-        console.log('=== REPORT DEBUG LOGS ===');
-        console.log('Overall Statistics:', JSON.stringify(stats, null, 2));
-        console.log('Main Topic Progress:', JSON.stringify(mainTopics, null, 2));
-        console.log('Subtopic Progress:', JSON.stringify(subtopics, null, 2));
-        console.log('Recent Activity:', JSON.stringify(activity, null, 2));
-        console.log('=== END DEBUG LOGS ===');
-
         setOverallStats(stats);
         setMainTopicProgress(mainTopics);
         setSubtopicProgress(subtopics);
         setRecentActivity(activity);
 
       } catch (err) {
-        console.error('Error fetching report data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load report data');
       } finally {
         setIsLoading(false);
@@ -168,7 +156,7 @@ export default function ReportScreen() {
       {
         icon: '📚',
         title: 'Topics Completed',
-        value: `${overallStats.completed_main_topics || 0} Topic${overallStats.completed_main_topics === 1 ? '' : 's'} Completed`,
+        value: `${overallStats.completed_main_topics || 0}/${overallStats.total_main_topics || 0}`,
         color: colors.primary
       },
       {
@@ -180,7 +168,7 @@ export default function ReportScreen() {
       {
         icon: '📖',
         title: 'Subtopics Completed',
-        value: `${overallStats.completed_subtopics || 0} Subtopic${overallStats.completed_subtopics === 1 ? '' : 's'} Completed`,
+        value: `${overallStats.completed_subtopics || 0}/${overallStats.total_subtopics || 0}`,
         color: colors.primary
       }
     ];
@@ -349,7 +337,7 @@ export default function ReportScreen() {
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <View style={styles.header}>
         <View style={styles.headerTop}>
-          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>Learning Report</ThemedText>
+          <ThemedText style={[styles.headerTitle, { color: colors.text }]}>📈 Learning Report</ThemedText>
           <Pressable 
             style={styles.closeButton}
             onPress={() => router.back()}
@@ -359,9 +347,7 @@ export default function ReportScreen() {
             <Ionicons name="close" size={22} color={colors.text} />
           </Pressable>
         </View>
-        <ThemedText style={[styles.headerSubtitle, { color: colors.textSecondary }]}>
-          Your progress overview
-        </ThemedText>
+        <ThemedText style={[styles.headerSubtitle, { color: colors.textSecondary }]}>Your personalized progress overview 🚀</ThemedText>
       </View>
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -388,7 +374,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
   },
   closeButton: {
