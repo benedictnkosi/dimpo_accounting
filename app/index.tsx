@@ -1,6 +1,8 @@
+import React from 'react';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { Header } from '@/components/Header';
 import { ThemedText } from '@/components/ThemedText';
@@ -10,6 +12,7 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { analytics } from '@/services/analytics';
 import { useDatabase, Topic as DatabaseTopic } from '@/hooks/useDatabase';
 import { getAllTopics, getTopicsByMainTopic } from '@/services/database';
+import { Paywall } from './components/Paywall';
 
 // Import the JSON data for emojis
 import topicEmojis from '@/assets/topic_emojis.json';
@@ -126,6 +129,7 @@ export default function HomeScreen() {
   const router = useRouter();
   const { colors, isDark } = useTheme();
   const { isInitialized, isLoading: isDatabaseLoading } = useDatabase();
+  const [showPaywall, setShowPaywall] = useState(false);
 
   // Load main topics from database
   useEffect(() => {
@@ -169,6 +173,27 @@ export default function HomeScreen() {
       has_error: !!error
     });
   }, [topics.length, isLoading, error]);
+
+  // Show paywall on first app visit
+  useEffect(() => {
+    async function checkFirstVisit() {
+      try {
+        const hasSeenPaywall = await AsyncStorage.getItem('hasSeenPaywall');
+        if (!hasSeenPaywall) {
+          setShowPaywall(true);
+        }
+      } catch (e) {
+        // fail silently
+      }
+    }
+    checkFirstVisit();
+  }, []);
+
+  // Handler for closing paywall
+  const handlePaywallClose = async () => {
+    setShowPaywall(false);
+    await AsyncStorage.setItem('hasSeenPaywall', 'true');
+  };
 
   const fetchSubtopicsFromDatabase = async (topicName: string): Promise<Subtopic[]> => {
     try {
@@ -246,13 +271,7 @@ export default function HomeScreen() {
 
   const handleShareApp = async () => {
     try {
-      // Track app sharing
-      analytics.track('accounting_app_shared', {
-        platform: 'home_screen',
-        share_method: 'native_share'
-      });
-
-      const iosLink = 'https://apps.apple.com/app/dimpo-accounting/6742684696';
+      const iosLink = 'https://apps.apple.com/app/dimpo-accounting/6747889803';
       const androidLink = 'https://play.google.com/store/apps/details?id=com.dimpoaccounting';
       
       await Share.share({
@@ -382,72 +401,77 @@ export default function HomeScreen() {
   }
 
   return (
-    <ScrollView style={{ flex: 1 }}>
-      <Header />
-      <ThemedView style={styles.container}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <ThemedText style={styles.loadingText}>Loading topics...</ThemedText>
-          </View>
-        ) : error ? (
-          <ThemedText>{error}</ThemedText>
-        ) : (
-          <View>
-            <ThemedView style={styles.topicsContainer}>
-              {topics.map((topic) => (
-                <Pressable
-                  key={topic.id}
-                  style={({ pressed }) => [
-                    [
-                      styles.topicCard,
-                      {
-                        backgroundColor: TOPIC_COLORS[topic.name]
-                          ? (isDark
-                            ? TOPIC_COLORS[topic.name].dark
-                            : TOPIC_COLORS[topic.name].light)
-                          : isDark
-                            ? colors.surface
-                            : '#fff'
-                      },
-                    ],
-                    pressed && styles.topicCardPressed,
-                  ]}
-                  onPress={() => handleTopicPress(topic)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select ${topic.name}`}
-                >
-                  <ThemedText style={styles.topicEmoji}>
-                    {(topicEmojis.topic_emojis as any)[topic.name] || '📊'}
-                  </ThemedText>
-                  <ThemedText style={styles.topicName}>
-                    {topic.name}
-                  </ThemedText>
-                 
-                  <ThemedText style={styles.topicDescription}>
-                    {TOPIC_DESCRIPTIONS[topic.name]?.description || 'No description available'}
-                  </ThemedText>
-                </Pressable>
-              ))}
-            </ThemedView>
-            
-            <Pressable
-              style={({ pressed }) => [
-                styles.shareButton,
-                pressed && styles.shareButtonPressed,
-              ]}
-              onPress={handleShareApp}
-              accessibilityRole="button"
-              accessibilityLabel="Share app"
-            >
-              <ThemedText style={styles.shareButtonText}>
-              🔗 Invite friends
-              </ThemedText>
-            </Pressable>
-          </View>
-        )}
-      </ThemedView>
-    </ScrollView>
+    <>
+      {showPaywall && (
+        <Paywall onClose={handlePaywallClose} onSuccess={handlePaywallClose} />
+      )}
+      <ScrollView style={{ flex: 1 }}>
+        <Header />
+        <ThemedView style={styles.container}>
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <ThemedText style={styles.loadingText}>Loading topics...</ThemedText>
+            </View>
+          ) : error ? (
+            <ThemedText>{error}</ThemedText>
+          ) : (
+            <View>
+              <ThemedView style={styles.topicsContainer}>
+                {topics.map((topic) => (
+                  <Pressable
+                    key={topic.id}
+                    style={({ pressed }) => [
+                      [
+                        styles.topicCard,
+                        {
+                          backgroundColor: TOPIC_COLORS[topic.name]
+                            ? (isDark
+                              ? TOPIC_COLORS[topic.name].dark
+                              : TOPIC_COLORS[topic.name].light)
+                            : isDark
+                              ? colors.surface
+                              : '#fff'
+                        },
+                      ],
+                      pressed && styles.topicCardPressed,
+                    ]}
+                    onPress={() => handleTopicPress(topic)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select ${topic.name}`}
+                  >
+                    <ThemedText style={styles.topicEmoji}>
+                      {(topicEmojis.topic_emojis as any)[topic.name] || '📊'}
+                    </ThemedText>
+                    <ThemedText style={styles.topicName}>
+                      {topic.name}
+                    </ThemedText>
+                   
+                    <ThemedText style={styles.topicDescription}>
+                      {TOPIC_DESCRIPTIONS[topic.name]?.description || 'No description available'}
+                    </ThemedText>
+                  </Pressable>
+                ))}
+              </ThemedView>
+              
+              <Pressable
+                style={({ pressed }) => [
+                  styles.shareButton,
+                  pressed && styles.shareButtonPressed,
+                ]}
+                onPress={handleShareApp}
+                accessibilityRole="button"
+                accessibilityLabel="Share app"
+              >
+                <ThemedText style={styles.shareButtonText}>
+                🔗 Invite friends
+                </ThemedText>
+              </Pressable>
+            </View>
+          )}
+        </ThemedView>
+      </ScrollView>
+    </>
   );
 }
 

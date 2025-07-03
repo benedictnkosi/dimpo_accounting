@@ -71,7 +71,6 @@ const createTables = () => {
     db.execSync('CREATE INDEX IF NOT EXISTS idx_question_report_date ON question_report (date);');
     db.execSync('CREATE INDEX IF NOT EXISTS idx_question_report_outcome ON question_report (outcome);');
 
-    console.log('Database tables created successfully');
   } catch (error) {
     console.error('Error creating tables:', error);
   }
@@ -87,7 +86,6 @@ export const insertTopic = (mainTopic: string, subTopic: string): Promise<void> 
 
     try {
       db.runSync('INSERT OR IGNORE INTO accounting_topic (main_topic, sub_topic) VALUES (?, ?)', [mainTopic, subTopic]);
-      console.log('Topic inserted successfully');
       resolve();
     } catch (error) {
       console.error('Error inserting topic:', error);
@@ -148,7 +146,6 @@ export const insertQuestion = (questionData: {
       ];
 
       db.runSync(sql, params);
-      console.log('Question inserted successfully');
       resolve();
     } catch (error) {
       console.error('Error inserting question:', error);
@@ -190,7 +187,6 @@ export const getTopicsByMainTopic = (mainTopic: string): Promise<Array<{ id: num
         'SELECT * FROM accounting_topic WHERE main_topic = ? ORDER BY sub_topic',
         [mainTopic]
       );
-      console.log('[getTopicsByMainTopic] mainTopic:', mainTopic, 'result:', result);
       resolve(result);
     } catch (error) {
       console.error('Error fetching topics by main topic:', error);
@@ -326,7 +322,6 @@ export const deleteTopic = (id: number): Promise<void> => {
 
     try {
       db.runSync('DELETE FROM accounting_topic WHERE id = ?', [id]);
-      console.log('Topic deleted successfully');
       resolve();
     } catch (error) {
       console.error('Error deleting topic:', error);
@@ -345,7 +340,6 @@ export const clearAllTopics = (): Promise<void> => {
 
     try {
       db.runSync('DELETE FROM accounting_topic');
-      console.log('All topics cleared successfully');
       resolve();
     } catch (error) {
       console.error('Error clearing topics:', error);
@@ -364,7 +358,6 @@ export const clearAllQuestions = (): Promise<void> => {
 
     try {
       db.runSync('DELETE FROM accounting_question');
-      console.log('All questions cleared successfully');
       resolve();
     } catch (error) {
       console.error('Error clearing questions:', error);
@@ -405,7 +398,6 @@ export const insertQuestionReport = (questionId: string, outcome: 'correct' | 'i
       
       const currentDate = new Date().toISOString();
       db.runSync(sql, [questionId, outcome, currentDate]);
-      console.log('Question report inserted successfully');
       resolve();
     } catch (error) {
       console.error('Error inserting question report:', error);
@@ -557,7 +549,6 @@ export const clearAllQuestionReports = (): Promise<void> => {
 
     try {
       db.runSync('DELETE FROM question_report');
-      console.log('All question reports cleared successfully');
       resolve();
     } catch (error) {
       console.error('Error clearing question reports:', error);
@@ -1295,49 +1286,6 @@ export const getQuestionCountsByMainTopic = (): Promise<Array<{
 // Log comprehensive question statistics
 export const logQuestionStatistics = async (): Promise<void> => {
   try {
-    console.log('📊 [DATABASE] ===== COMPREHENSIVE QUESTION STATISTICS =====');
-    
-    // Get overall statistics
-    const overallStats = await getOverallStatistics();
-    console.log('📊 [DATABASE] Overall Statistics:');
-    console.log(`  Total questions available: ${overallStats.total_questions_available}`);
-    console.log(`  Total questions answered: ${overallStats.total_questions_answered}`);
-    console.log(`  Total correct answers: ${overallStats.total_correct_answers}`);
-    console.log(`  Overall accuracy: ${overallStats.overall_accuracy}%`);
-    console.log(`  Total subtopics: ${overallStats.total_subtopics}`);
-    console.log(`  Completed subtopics: ${overallStats.completed_subtopics}`);
-    console.log(`  Total main topics: ${overallStats.total_main_topics}`);
-    console.log(`  Completed main topics: ${overallStats.completed_main_topics}`);
-    
-    // Get question counts by main topic
-    const mainTopicCounts = await getQuestionCountsByMainTopic();
-    console.log('\n📊 [DATABASE] Questions by Main Topic:');
-    for (const topic of mainTopicCounts) {
-      console.log(`  ${topic.main_topic}: ${topic.total_questions} questions (${topic.subtopics_count} subtopics)`);
-    }
-    
-    // Get detailed question counts per subtopic
-    const subtopicCounts = await getQuestionCountsPerSubtopic();
-    console.log('\n📊 [DATABASE] Questions by Subtopic and Level:');
-    let currentMainTopic = '';
-    let currentSubtopic = '';
-    
-    for (const item of subtopicCounts) {
-      if (item.main_topic !== currentMainTopic) {
-        currentMainTopic = item.main_topic;
-        console.log(`\n  📚 ${item.main_topic}:`);
-      }
-      
-      if (item.sub_topic !== currentSubtopic) {
-        currentSubtopic = item.sub_topic;
-        console.log(`    📖 ${item.sub_topic}:`);
-      }
-      
-      console.log(`      ${item.level}: ${item.question_count} questions`);
-    }
-    
-    console.log('\n📊 [DATABASE] ===========================================');
-    
   } catch (error) {
     console.error('📊 [DATABASE] Error logging question statistics:', error);
   }

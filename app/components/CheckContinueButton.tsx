@@ -115,7 +115,7 @@ export function FeedbackButton({ isDisabled, onCheck, onContinue }: FeedbackButt
             try {
                 const alreadyLogged = await AsyncStorage.getItem(storageKey);
                 if (!alreadyLogged) {
-                    analytics.track('question_answered', {
+                    analytics.track('accounting_question_answered', {
                         isCorrect: latestFeedbackRef.current.isCorrect,
                         timestamp: new Date().toISOString(),
                     });

@@ -25,7 +25,6 @@ import { MultiStepQuestion } from './components/MultiStepQuestion';
 import { StepFlowQuestion } from './components/StepFlowQuestion';
 import { DragToSortQuestion } from './components/DragToSortQuestion';
 
-import subtopicEmojis from '@/assets/subtopic_emojis.json';
 import subtopicEmojisData from '@/assets/subtopic_emojis.json';
 
 interface AccountingQuestion {
@@ -261,7 +260,7 @@ export default function AccountingLessonScreen() {
           if (!isNaN(topicIdNum)) {
             const levelCompleted = await isLevelCompleted(topicIdNum, levelName as string);
             if (levelCompleted) {
-              analytics.track('level_completed', {
+              analytics.track('accounting_level_completed', {
                 topic_id: topicId,
                 topic_name: topicName,
                 subtopic_id: subtopicId,

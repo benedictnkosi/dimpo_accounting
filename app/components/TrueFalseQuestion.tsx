@@ -9,6 +9,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { logQuestionAnswer } from '@/services/questionReporting';
+import StoreReview from 'expo-store-review';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleRateAppPrompt } from './RateAppPromptUtil';
 
 interface TrueFalseQuestionProps {
   id: string;
@@ -134,6 +137,11 @@ export function TrueFalseQuestion({
     
     // Call onQuestionAnswered after logging the answer
     onQuestionAnswered?.();
+
+    // Rate app prompt logic
+    if (isCorrect) {
+      handleRateAppPrompt();
+    }
   };
 
   const handleContinue = () => {

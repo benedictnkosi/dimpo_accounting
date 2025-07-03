@@ -20,11 +20,7 @@ export function LevelUnlockModal({ visible, onDismiss, unlockedLevel }: LevelUnl
   const [scale] = React.useState(new Animated.Value(0));
   const [rotation] = React.useState(new Animated.Value(0));
 
-  console.log('🎭 [DEBUG] LevelUnlockModal render:', {
-    visible,
-    unlockedLevel,
-    hasUnlockedLevel: !!unlockedLevel
-  });
+
 
   React.useEffect(() => {
     console.log('🎭 [DEBUG] LevelUnlockModal useEffect - visible changed to:', visible);

@@ -11,6 +11,9 @@ import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import CheckContinueButton from './CheckContinueButton';
 import { logQuestionAnswer } from '@/services/questionReporting';
+import StoreReview from 'expo-store-review';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleRateAppPrompt } from './RateAppPromptUtil';
 
 interface DragToSortQuestionProps {
   id: string;
@@ -45,7 +48,7 @@ export function DragToSortQuestion({
   onMilestoneNotification,
   onQuestionAnswered,
 }: DragToSortQuestionProps) {
-  console.log('[DragToSortQuestion] items:', items);
+  
   const [sortableItems, setSortableItems] = useState<SortableItem[]>([]);
   const [isAnswered, setIsAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
@@ -128,6 +131,9 @@ export function DragToSortQuestion({
       // Log the question answer
       const result = await logQuestionAnswer(id, true, customerInfo);
       
+      // Rate app prompt logic
+      handleRateAppPrompt();
+
       // Check if daily limit was reached
       if (result.limitReached) {
         Alert.alert(
@@ -338,7 +344,7 @@ export function DragToSortQuestion({
   };
 
   const sortedItems = [...sortableItems].sort((a, b) => a.currentIndex - b.currentIndex);
-  console.log('[DragToSortQuestion] sortedItems:', sortedItems);
+ 
 
   return (
     <View style={styles.outerContainer}>

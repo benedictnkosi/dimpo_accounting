@@ -9,6 +9,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { logQuestionAnswer } from '@/services/questionReporting';
+import StoreReview from 'expo-store-review';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleRateAppPrompt } from './RateAppPromptUtil';
 
 // Assign a color to each category for visual feedback
 const CATEGORY_COLORS = [
@@ -70,29 +73,10 @@ export function CategoriseQuestion({
   const [shuffledItemKeys, setShuffledItemKeys] = useState<string[]>([]);
   const soundRef = React.useRef<Audio.Sound | null>(null);
 
-  // Log props on component mount
-  useEffect(() => {
-    console.log('🔍 CategoriseQuestion mounted with props:', {
-      id,
-      prompt,
-      categories,
-      items,
-      categoriesCount: categories?.length,
-      itemsCount: items ? Object.keys(items).length : 0,
-      itemsKeys: items ? Object.keys(items) : [],
-      itemsValues: items ? Object.values(items) : []
-    });
-  }, [id, prompt, categories, items]);
-
   // Assign a color to each category
   const categoryColorMap = Object.fromEntries(
     categories.map((cat, idx) => [cat, CATEGORY_COLORS[idx % CATEGORY_COLORS.length]])
   );
-
-  // Log category color mapping
-  useEffect(() => {
-    console.log('🎨 Category color mapping:', categoryColorMap);
-  }, [categoryColorMap]);
 
   // Shuffle items on mount or when question changes
   useEffect(() => {
@@ -101,7 +85,6 @@ export function CategoriseQuestion({
 
   // Play feedback sound function
   const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    console.log('🔊 Playing feedback sound:', type, 'Sound enabled:', soundEnabled);
     if (!soundEnabled) return;
     try {
       if (soundRef.current) {
@@ -133,13 +116,10 @@ export function CategoriseQuestion({
   };
 
   useEffect(() => {
-    console.log('🔄 Initializing CategoriseQuestion state for id:', id);
     const initial: Record<string, string | null> = {};
     Object.keys(items).forEach(item => {
       initial[item] = null;
     });
-    console.log('📝 Initial assignments:', initial);
-    console.log('📝 About to call setAssignments with:', initial);
     setAssignments(initial);
     setSelectedItem(null);
     setIsAnswered(false);
@@ -147,7 +127,6 @@ export function CategoriseQuestion({
     setIsQuestionAnswered(false);
     
     return () => {
-      console.log('🧹 CategoriseQuestion cleanup for id:', id);
     };
   }, [id]);
 
@@ -200,6 +179,11 @@ export function CategoriseQuestion({
           onMilestoneNotification(result.milestoneNotification);
         }
 
+        // Rate app prompt logic
+        if (allCorrect) {
+          handleRateAppPrompt();
+        }
+
         // Call onQuestionAnswered after logging the answer
         onQuestionAnswered?.();
       };
@@ -216,8 +200,6 @@ export function CategoriseQuestion({
 
   // Handle continue (reset)
   const handleContinue = () => {
-    console.log('➡️ Continuing to next question');
-    // Stop any playing audio
     if (soundRef.current) {
       soundRef.current.unloadAsync();
       soundRef.current = null;
@@ -236,26 +218,20 @@ export function CategoriseQuestion({
 
   // Tap item to select for assignment
   const handleItemTap = (item: string) => {
-    console.log('👆 Item tapped:', item, 'Is answered:', isAnswered);
     if (isAnswered) return;
     setSelectedItem(item);
   };
 
   // Tap category to assign selected item (restrict to correct category)
   const handleCategoryTap = async (category: string) => {
-    console.log('🎯 Category tapped:', category, 'Selected item:', selectedItem, 'Is answered:', isAnswered);
     if (!selectedItem || isAnswered) {
-      console.log('❌ Cannot assign - no selected item or already answered');
       return;
     }
     if (items[selectedItem] !== category) {
-      console.log('❌ Wrong category! Expected:', items[selectedItem], 'Got:', category);
       await playFeedbackSound('wrong');
       setSelectedItem(null);
       return;
     }
-    console.log('✅ Correct assignment!', selectedItem, '->', category);
-    // Play correct sound for successful assignment
     await playFeedbackSound('correct');
     setAssignments(prev => ({ ...prev, [selectedItem]: category }));
     setSelectedItem(null);
@@ -334,23 +310,6 @@ export function CategoriseQuestion({
     }
     return null;
   };
-
-  // Log current state for debugging
-  useEffect(() => {
-    console.log('📊 CategoriseQuestion current state:', {
-      selectedItem,
-      isAnswered,
-      assignments,
-      feedback
-    });
-  }, [selectedItem, isAnswered, assignments, feedback]);
-
-  // Track assignments state changes specifically
-  useEffect(() => {
-    console.log('🔄 Assignments state changed to:', assignments);
-    console.log('🔄 Assignments keys:', Object.keys(assignments));
-    console.log('🔄 Assignments values:', Object.values(assignments));
-  }, [assignments]);
 
   return (
     <View style={{ flex: 1, padding: 16, backgroundColor: '#F6F8FA' }}>

@@ -11,6 +11,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { logQuestionAnswer } from '@/services/questionReporting';
+import StoreReview from 'expo-store-review';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleRateAppPrompt } from './RateAppPromptUtil';
 
 interface TapToSelectQuestionProps {
   id: string;
@@ -133,6 +136,11 @@ export function TapToSelectQuestion({
     // Handle milestone notification
     if (result.milestoneNotification && onMilestoneNotification) {
       onMilestoneNotification(result.milestoneNotification);
+    }
+
+    // Rate app prompt logic
+    if (isCorrect) {
+      handleRateAppPrompt();
     }
 
     // Play sound feedback immediately

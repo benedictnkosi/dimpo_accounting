@@ -12,4 +12,6 @@ export const colors = {
         background: '#121212',
     },
     primary: '#007AFF',
-}; 
+};
+
+export const Colors = colors; 

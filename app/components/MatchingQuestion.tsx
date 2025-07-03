@@ -11,6 +11,9 @@ import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import CheckContinueButton from './CheckContinueButton';
 import { logQuestionAnswer } from '@/services/questionReporting';
+import StoreReview from 'expo-store-review';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleRateAppPrompt } from './RateAppPromptUtil';
 
 interface MatchingQuestionProps {
   id: string;
@@ -192,6 +195,9 @@ export function MatchingQuestion({
           
           // Log the question answer
           const result = await logQuestionAnswer(id, true, customerInfo);
+          
+          // Rate app prompt logic
+          handleRateAppPrompt();
           
           // Check if daily limit was reached
           if (result.limitReached) {

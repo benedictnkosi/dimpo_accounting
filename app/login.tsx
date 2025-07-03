@@ -8,6 +8,8 @@ import Toast from 'react-native-toast-message';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import Constants from 'expo-constants';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Colors } from '@/constants/Colors';
 
 export default function Login() {
   const [emailOrPhone, setEmailOrPhone] = useState('');
@@ -15,6 +17,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const { signIn } = useAuth();
+  const { isDark } = useTheme();
 
   const validateInput = (input: string): { isValid: boolean; email: string } => {
     // Check if input is a valid email
@@ -80,9 +83,9 @@ export default function Login() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[styles.container, { backgroundColor: isDark ? Colors.dark.background : Colors.light.background }]}>
       <LinearGradient
-        colors={['#1B1464', '#2B2F77']}
+        colors={isDark ? ['#1E1E1E', '#121212'] : ['#FFFFFF', '#F5F5F5']}
         style={styles.gradient}
       >
         <KeyboardAvoidingView
@@ -96,17 +99,24 @@ export default function Login() {
           >
             <View style={styles.content}>
               <View style={styles.header}>
-                <ThemedText style={styles.title}>🏳️‍🌈 Dimpo Accounting</ThemedText>
-                <ThemedText style={styles.subtitle}> 
+                <ThemedText style={[styles.title, { color: isDark ? Colors.dark.text : Colors.light.text }]}>🏳️‍🌈 Dimpo Accounting</ThemedText>
+                <ThemedText style={[styles.subtitle, { color: isDark ? Colors.dark.textSecondary : Colors.light.textSecondary }]}> 
                 Master Financial Statements, Ratio Analysis, and more with interactive lessons.
                 </ThemedText>
               </View>
 
               <View style={styles.form}>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    {
+                      backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)',
+                      color: isDark ? Colors.dark.text : Colors.light.text,
+                      borderColor: isDark ? 'rgba(255,255,255,0.15)' : '#E5E7EB',
+                    },
+                  ]}
                   placeholder="Email or Phone Number"
-                  placeholderTextColor="#94A3B8"
+                  placeholderTextColor={isDark ? Colors.dark.textSecondary : '#94A3B8'}
                   value={emailOrPhone}
                   onChangeText={setEmailOrPhone}
                   autoCapitalize="none"
@@ -116,9 +126,17 @@ export default function Login() {
                 />
                 <View style={styles.passwordContainer}>
                   <TextInput
-                    style={[styles.input, styles.passwordInput]}
+                    style={[
+                      styles.input,
+                      styles.passwordInput,
+                      {
+                        backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.03)',
+                        color: isDark ? Colors.dark.text : Colors.light.text,
+                        borderColor: isDark ? 'rgba(255,255,255,0.15)' : '#E5E7EB',
+                      },
+                    ]}
                     placeholder="Password"
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={isDark ? Colors.dark.textSecondary : '#94A3B8'}
                     value={password}
                     onChangeText={setPassword}
                     secureTextEntry={!showPassword}
@@ -133,36 +151,36 @@ export default function Login() {
                     <Ionicons
                       name={showPassword ? "eye-off" : "eye"}
                       size={24}
-                      color="#94A3B8"
+                      color={isDark ? Colors.dark.textSecondary : '#94A3B8'}
                     />
                   </TouchableOpacity>
                 </View>
                 <TouchableOpacity
-                  style={[styles.button, isLoading && styles.buttonDisabled]}
+                  style={[styles.button, { backgroundColor: isDark ? Colors.primary : '#FFFFFF' }, isLoading && styles.buttonDisabled]}
                   onPress={handleLogin}
                   disabled={isLoading}
                   testID="login-button"
                 >
-                  <ThemedText style={styles.buttonText}>
+                  <ThemedText style={[styles.buttonText, { color: isDark ? '#FFFFFF' : '#1B1464' }] }>
                     {isLoading ? 'Signing in...' : 'Start Learning →'}
                   </ThemedText>
                 </TouchableOpacity>
 
                 <View style={styles.registerContainer}>
-                  <ThemedText style={styles.helperText}>
+                  <ThemedText style={[styles.helperText, { color: isDark ? Colors.dark.textSecondary : Colors.light.textSecondary }] }>
                     New to Dimpo Accounting? Join our community of learners! 🌍
                   </ThemedText>
                   <TouchableOpacity
-                    style={styles.createAccountButton}
+                    style={[styles.createAccountButton, { backgroundColor: isDark ? Colors.primary : '#3B82F6' }]}
                     onPress={() => router.push('/onboarding')}
                     testID="create-account-button"
                   >
-                    <ThemedText style={styles.createAccountButtonText}>Create an account</ThemedText>
+                    <ThemedText style={[styles.createAccountButtonText, { color: '#FFFFFF' }]}>Create an account</ThemedText>
                   </TouchableOpacity>
                 </View>
 
                 <View style={styles.forgotPasswordContainer}>
-                  <ThemedText style={styles.helperText}>
+                  <ThemedText style={[styles.helperText, { color: isDark ? Colors.dark.textSecondary : Colors.light.textSecondary }] }>
                     Forgot your password? We'll help you get back to learning! 🔑
                   </ThemedText>
                   <TouchableOpacity
@@ -170,7 +188,7 @@ export default function Login() {
                     onPress={() => router.push('/forgot-password')}
                     testID="forgot-password-button"
                   >
-                    <ThemedText style={styles.linkText}>Reset it here</ThemedText>
+                    <ThemedText style={[styles.linkText, { color: '#FFFFFF' }]}>Reset it here</ThemedText>
                   </TouchableOpacity>
                 </View>
 
@@ -180,7 +198,7 @@ export default function Login() {
                     onPress={() => router.push('https://examquiz.co.za/info/delete-account')}
                     testID="delete-account-button"
                   >
-                    <ThemedText style={styles.deleteAccountText}>Delete Account</ThemedText>
+                    <ThemedText style={[styles.deleteAccountText, { color: '#EF4444' }]}>Delete Account</ThemedText>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -221,15 +239,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 16,
     textAlign: 'center',
     width: '100%',
     letterSpacing: -1,
   },
   subtitle: {
     fontSize: 20,
-    color: '#E2E8F0',
     textAlign: 'center',
     lineHeight: 28,
     paddingHorizontal: 8,
@@ -238,15 +253,14 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
-    padding: 16,
     borderRadius: 12,
+    padding: 16,
     fontSize: 16,
-    color: '#FFFFFF',
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
   },
   button: {
-    backgroundColor: '#FFFFFF',
     padding: 16,
     borderRadius: 28,
     alignItems: 'center',
@@ -256,7 +270,6 @@ const styles = StyleSheet.create({
     opacity: 0.7,
   },
   buttonText: {
-    color: '#1B1464',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -266,7 +279,6 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   createAccountButton: {
-    backgroundColor: '#3B82F6',
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 28,
@@ -275,7 +287,6 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   createAccountButtonText: {
-    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '600',
   },
@@ -284,7 +295,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   helperText: {
-    color: '#E2E8F0',
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 8,
@@ -294,7 +304,6 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   linkText: {
-    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
     textDecorationLine: 'underline',
@@ -325,7 +334,6 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   deleteAccountText: {
-    color: '#EF4444',
     fontSize: 16,
     fontWeight: '600',
     textDecorationLine: 'underline',

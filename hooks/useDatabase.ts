@@ -20,15 +20,9 @@ export const useDatabase = () => {
         setIsLoading(true);
         setError(null);
         
-        console.log('[useDatabase] Checking database initialization...');
-        
         // Check if database is already initialized
         if (!isDatabaseInitialized()) {
-          console.log('[useDatabase] Database not initialized, starting initialization...');
           await initializeDatabaseOnStartup();
-          console.log('[useDatabase] Database initialization completed');
-        } else {
-          console.log('[useDatabase] Database already initialized');
         }
         
         setIsInitialized(true);

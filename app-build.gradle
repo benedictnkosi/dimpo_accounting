@@ -91,8 +91,8 @@ android {
         applicationId 'com.dimpoaccounting'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1011
-        versionName "1.0.11"
+        versionCode 1012
+        versionName "1.0.12"
     }
     signingConfigs {
         debug {

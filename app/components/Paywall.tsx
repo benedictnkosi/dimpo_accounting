@@ -18,7 +18,7 @@ export function Paywall({ onSuccess, onClose, offerings }: PaywallProps) {
 
         try {
             // Track paywall load event
-            await analytics.track('paywall_shown', {
+            await analytics.track('accounting_paywall_shown', {
                 userId: user.uid,
                 timestamp: new Date().toISOString()
             });
@@ -40,7 +40,7 @@ export function Paywall({ onSuccess, onClose, offerings }: PaywallProps) {
             // Check if purchase was successful
             if (result === PAYWALL_RESULT.PURCHASED) {
                 // Track successful purchase
-                await analytics.track('purchase_successful', {
+                await analytics.track('accounting_purchase_successful', {
                     userId: user.uid,
                     timestamp: new Date().toISOString()
                 });
@@ -50,7 +50,7 @@ export function Paywall({ onSuccess, onClose, offerings }: PaywallProps) {
                 onSuccess?.();
             } else {
                 // Track paywall closed without purchase
-                await analytics.track('paywall_closed', {
+                await analytics.track('accounting_paywall_closed', {
                     userId: user.uid,
                     timestamp: new Date().toISOString()
                 });
@@ -58,7 +58,7 @@ export function Paywall({ onSuccess, onClose, offerings }: PaywallProps) {
             }
         } catch (error) {
             // Track paywall error
-            await analytics.track('paywall_error', {
+            await analytics.track('accounting_paywall_error', {
                 userId: user.uid,
                 error: error instanceof Error ? error.message : 'Unknown error',
                 timestamp: new Date().toISOString()

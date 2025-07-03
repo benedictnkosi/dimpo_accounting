@@ -7,7 +7,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
 import { analytics } from '@/services/analytics';
 import subtopicEmojis from '@/assets/subtopic_emojis.json';
@@ -335,7 +334,7 @@ export default function SubtopicsScreen() {
           await saveUnlockModalState(topicId as string, subtopic.id, levelIndex);
           
           // Track the unlock event
-          analytics.track('level_unlocked', {
+          analytics.track('accounting_level_unlocked', {
             topic_id: topicId,
             topic_name: topicName,
             subtopic_id: subtopic.id,
@@ -454,14 +453,6 @@ export default function SubtopicsScreen() {
   };
 
   const handleRetryPress = async (subtopic: Subtopic, level: Level) => {
-    analytics.track('accounting_retry_selected', {
-      topic_id: topicId,
-      topic_name: topicName,
-      subtopic_id: subtopic.id,
-      subtopic_name: subtopic.name,
-      level_id: level.id,
-      level_name: level.name
-    });
 
     // Find the database topic ID for this subtopic
     let databaseTopicId = null;
@@ -897,20 +888,7 @@ export default function SubtopicsScreen() {
                             </ThemedText>
                           )}
                           
-                          {/* Show unlocking criteria for locked levels */}
-                          {!isUnlocked && levelIndex > 0 && completionStatus && (
-                            <ThemedText style={[styles.completionMessage, { color: colors.textSecondary, fontSize: 11 }]}>
-                              🔓 Unlock: {totalAnswered}/9 answers, {Math.round(accuracyPercentage)}%/80% accuracy
-                            </ThemedText>
-                          )}
-                          
-                          {/* Show progress towards unlocking for current level */}
-                          {isUnlocked && levelIndex > 0 && completionStatus && !meetsUnlockCriteria && totalAnswered > 0 && (
-                            <ThemedText style={[styles.completionMessage, { color: colors.textSecondary, fontSize: 11 }]}>
-                              🔓 Next level: {totalAnswered}/9 answers, {Math.round(accuracyPercentage)}%/80% accuracy
-                            </ThemedText>
-                          )}
-                          
+                      
                           {hasIncorrect && isUnlocked && (
                             <Pressable
                               style={({ pressed }) => [

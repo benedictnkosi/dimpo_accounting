@@ -3,7 +3,7 @@ import { getQuestionStatistics } from './database';
 import { getDailyLimitInfo, isPremiumUser } from './dailyLimit';
 
 const LIFETIME_STATS_KEY = 'lifetime_stats';
-const LIFETIME_LIMIT = 100;
+const LIFETIME_LIMIT = 60;
 const MILESTONE_NOTIFICATIONS_KEY = 'milestone_notifications';
 
 export interface LifetimeStats {
@@ -126,10 +126,8 @@ export const checkMilestoneNotification = async (remainingQuestions: number): Pr
  */
 export const getLifetimeStats = async (): Promise<LifetimeStats> => {
   try {
-    console.log('[LifetimeStats] getLifetimeStats called');
     // Always get from database
     const dbStats = await getQuestionStatistics();
-    console.log('[LifetimeStats] DB stats fetched:', dbStats);
     const totalQuestionsAnswered = dbStats.total_answers;
     const remainingQuestions = Math.max(0, LIFETIME_LIMIT - totalQuestionsAnswered);
     const isLimitReached = totalQuestionsAnswered >= LIFETIME_LIMIT;
@@ -142,7 +140,6 @@ export const getLifetimeStats = async (): Promise<LifetimeStats> => {
       remainingQuestions,
       isLimitReached
     };
-    console.log('[LifetimeStats] Returning lifetimeStats:', lifetimeStats);
     return lifetimeStats;
   } catch (error) {
     console.error('[LifetimeStats] Error getting lifetime stats from database:', error);
@@ -171,10 +168,8 @@ export const updateLifetimeStats = async (isCorrect: boolean): Promise<{
   };
 }> => {
   try {
-    console.log('[LifetimeStats] updateLifetimeStats called. isCorrect:', isCorrect);
     // Always get the latest stats from the database
     const currentStats = await getLifetimeStats();
-    console.log('[LifetimeStats] Current stats before update:', currentStats);
     const updatedStats: LifetimeStats = {
       totalQuestionsAnswered: currentStats.totalQuestionsAnswered + 1,
       totalCorrectAnswers: currentStats.totalCorrectAnswers + (isCorrect ? 1 : 0),
@@ -191,10 +186,8 @@ export const updateLifetimeStats = async (isCorrect: boolean): Promise<{
     // Calculate remaining questions and limit status
     updatedStats.remainingQuestions = Math.max(0, LIFETIME_LIMIT - updatedStats.totalQuestionsAnswered);
     updatedStats.isLimitReached = updatedStats.totalQuestionsAnswered >= LIFETIME_LIMIT;
-    console.log('[LifetimeStats] Updated stats after answering:', updatedStats);
     // Check for milestone notification
     const milestoneNotification = await checkMilestoneNotification(updatedStats.remainingQuestions);
-    console.log('[LifetimeStats] Milestone notification:', milestoneNotification);
     return {
       stats: updatedStats,
       milestoneNotification
@@ -214,13 +207,10 @@ export const getCombinedLimitInfo = async (customerInfo: any): Promise<CombinedL
       getDailyLimitInfo(customerInfo),
       getLifetimeStats()
     ]);
-    console.log('[LifetimeStats] Daily stats fetched:', dailyLimitInfo);
-    console.log('[LifetimeStats] Lifetime stats fetched:', lifetimeStats);
     const combined = {
       daily: dailyLimitInfo,
       lifetime: lifetimeStats
     };
-    console.log('[LifetimeStats] Returning combined limit info:', combined);
     return combined;
   } catch (error) {
     console.error('[LifetimeStats] Error getting combined limit info:', error);
@@ -254,7 +244,6 @@ export const resetLifetimeStats = async (): Promise<void> => {
   try {
     await AsyncStorage.removeItem(LIFETIME_STATS_KEY);
     await AsyncStorage.removeItem(MILESTONE_NOTIFICATIONS_KEY);
-    console.log('[LifetimeStats] Lifetime stats reset successfully');
   } catch (error) {
     console.error('[LifetimeStats] Error resetting lifetime stats:', error);
     throw error;

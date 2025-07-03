@@ -9,7 +9,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import * as SecureStore from 'expo-secure-store';
 import React, { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
+import { ScrollView, StyleSheet, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -59,7 +59,7 @@ export default function ProfileScreen() {
       });
       setEditName(learnerData.name);
 
-      //console.log('subscription', learnerData.subscription);
+      console.log('Fetched subscription:', learnerData.subscription);
     } catch (error) {
       console.error('Error fetching learner data:', error);
     }
@@ -191,7 +191,26 @@ export default function ProfileScreen() {
 
         <ThemedView style={styles.content}>
           <ThemedView style={[styles.profileCard, { backgroundColor: isDark ? colors.card : '#FFFFFF' }]}>
-            
+            {/* Show Pro badge for non-free users (smaller, above name label) */}
+            {profileInfo?.subscription && profileInfo.subscription !== 'free' && (
+              <ThemedView style={styles.proBadgeRowSmall}>
+                <LinearGradient
+                  colors={isDark ? ['#fbbf24', '#f59e42'] : ['#fbbf24', '#f59e42']}
+                  style={styles.proBadgeGradientSmall}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                >
+                  <View style={styles.proBadgeContentSmall}>
+                    <Image
+                      source={require('@/assets/images/trophy.png')}
+                      style={styles.proBadgeImageSmall}
+                      resizeMode="contain"
+                    />
+                    <ThemedText style={styles.proBadgeTextSmall}>Pro Plan</ThemedText>
+                  </View>
+                </LinearGradient>
+              </ThemedView>
+            )}
             <View style={styles.editForm}>
               <View style={styles.inputGroup}>
                 <ThemedText style={[styles.label, { color: colors.text }]}>Name</ThemedText>
@@ -712,5 +731,86 @@ const styles = StyleSheet.create({
   },
   toggleThumbChecked: {
     transform: [{ translateX: 20 }],
+  },
+  proBadgeRow: {
+    marginTop: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proBadgeGradient: {
+    borderRadius: 24,
+    paddingVertical: 24,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#fbbf24',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  proBadgeContent: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+  },
+  proBadgeImage: {
+    width: 90,
+    height: 90,
+    marginBottom: 8,
+  },
+  proBadgeText: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: '#f59e42',
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+    letterSpacing: 1,
+  },
+  proBadgeRowSmall: {
+    marginTop: 0,
+    marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proBadgeGradientSmall: {
+    borderRadius: 16,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 'auto',
+    maxWidth: 200,
+    shadowColor: '#fbbf24',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  proBadgeContentSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  proBadgeImageSmall: {
+    width: 28,
+    height: 28,
+    marginBottom: 0,
+    marginRight: 6,
+  },
+  proBadgeTextSmall: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#fff',
+    textShadowColor: '#f59e42',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+    letterSpacing: 0.5,
   },
 }); 

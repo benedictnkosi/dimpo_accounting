@@ -10,6 +10,8 @@ import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import Toast from 'react-native-toast-message';
 import { OnboardingData } from '../onboarding';
+import { useTheme } from '@/contexts/ThemeContext';
+import { Colors } from '@/constants/Colors';
 
 interface RegisterFormProps {
     onboardingData: OnboardingData;
@@ -29,6 +31,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [registrationMethod, setRegistrationMethod] = useState<RegistrationMethod>(defaultMethod);
     const { signUp } = useAuth();
+    const { isDark } = useTheme();
 
     // Refs for keyboard navigation
     const nameRef = React.useRef<TextInput>(null);
@@ -39,7 +42,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
 
     // Track page view when component mounts
     useEffect(() => {
-        analytics.track('langauges_register_page_viewed', {
+        analytics.track('accounting_register_page_viewed', {
             registration_method: registrationMethod,
             has_onboarding_data: !!onboardingData,
             avatar_id: onboardingData?.avatar || 'none'
@@ -59,7 +62,8 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
     };
 
     const validatePhoneNumber = (phone: string): boolean => {
-        return /^\d{10}$/.test(phone);
+        // Allow any phone number (no strict validation)
+        return phone.length > 0;
     };
 
     const handleRegister = async () => {
@@ -81,7 +85,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
             Toast.show({
                 type: 'error',
                 text1: 'Error',
-                text2: 'Please enter a valid 10-digit phone number',
+                text2: 'Please enter your phone number',
                 position: 'bottom',
                 visibilityTime: 3000,
                 autoHide: true,
@@ -209,7 +213,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
             });
 
             // Track detailed registration success
-            analytics.track('languages_register_success', {
+            analytics.track('accounting_register_success', {
                 user_id: user.uid,
                 email: userEmail,
                 registration_method: registrationMethod,
@@ -238,7 +242,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
             console.error('Registration error:', error);
             
             // Track registration error
-            analytics.track('languages_register_error', {
+            analytics.track('accounting_register_error', {
                 registration_method: registrationMethod,
                 has_onboarding_data: !!onboardingData,
                 avatar_id: onboardingData?.avatar || 'none',
@@ -267,6 +271,13 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
         setRegistrationMethod('phone');
     };
 
+    const handleCreatePhone = () => {
+        setRegistrationMethod('email');
+    };
+
+    // Use themeColors for easier access
+    const themeColors = Colors as any;
+
     return (
         <KeyboardAvoidingView 
             style={styles.keyboardAvoidingView}
@@ -280,21 +291,21 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                 keyboardShouldPersistTaps="handled"
                 automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
             >
-                <View style={styles.container} testID="register-form-container">
-                    <View style={styles.registrationMethodContainer}>
+                <View style={styles.card} testID="register-form-container">
+                    <View style={[styles.registrationMethodContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.1)' }]}> 
                         <TouchableOpacity
                             style={[
                                 styles.methodButton,
-                                registrationMethod === 'email' && styles.methodButtonActive
+                                registrationMethod === 'email' && [styles.methodButtonActive, { backgroundColor: isDark ? themeColors.primary : '#4F46E5' }]
                             ]}
                             onPress={() => {
-                                
                                 setRegistrationMethod('email');
                             }}
                         >
                             <ThemedText style={[
                                 styles.methodButtonText,
-                                registrationMethod === 'email' && styles.methodButtonTextActive
+                                { color: isDark ? themeColors["dark"].textSecondary : themeColors["light"].textSecondary },
+                                registrationMethod === 'email' && [styles.methodButtonTextActive, { color: isDark ? '#FFFFFF' : '#FFFFFF' }]
                             ]}>
                                 Email
                             </ThemedText>
@@ -302,16 +313,16 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                         <TouchableOpacity
                             style={[
                                 styles.methodButton,
-                                registrationMethod === 'phone' && styles.methodButtonActive
+                                registrationMethod === 'phone' && [styles.methodButtonActive, { backgroundColor: isDark ? themeColors.primary : '#4F46E5' }]
                             ]}
                             onPress={() => {
-                                
                                 setRegistrationMethod('phone');
                             }}
                         >
                             <ThemedText style={[
                                 styles.methodButtonText,
-                                registrationMethod === 'phone' && styles.methodButtonTextActive
+                                { color: isDark ? themeColors["dark"].textSecondary : themeColors["light"].textSecondary },
+                                registrationMethod === 'phone' && [styles.methodButtonTextActive, { color: isDark ? '#FFFFFF' : '#FFFFFF' }]
                             ]}>
                                 Phone
                             </ThemedText>
@@ -320,9 +331,9 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
 
                     <TextInput
                         ref={nameRef}
-                        style={styles.input}
+                        style={[styles.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.1)', color: themeColors[isDark ? 'dark' : 'light'].text }]}
                         placeholder="Name"
-                        placeholderTextColor="#94A3B8"
+                        placeholderTextColor={isDark ? '#AAAAAA' : '#94A3B8'}
                         value={name}
                         onChangeText={setName}
                         testID="name-input"
@@ -342,9 +353,9 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                         <>
                             <TextInput
                                 ref={emailRef}
-                                style={styles.input}
+                                style={[styles.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.1)', color: themeColors[isDark ? 'dark' : 'light'].text }]}
                                 placeholder="Email"
-                                placeholderTextColor="#94A3B8"
+                                placeholderTextColor={isDark ? '#AAAAAA' : '#94A3B8'}
                                 value={email}
                                 onChangeText={setEmail}
                                 autoCapitalize="none"
@@ -360,35 +371,46 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                                 style={styles.gmailLink}
                                 accessibilityLabel="Use phone number instead"
                             >
-                                <ThemedText style={styles.gmailLinkText}>
+                                <ThemedText style={[styles.gmailLinkText, { color: isDark ? themeColors.primary : themeColors.primary }] }>
                                     Don't have an email? Use your phone number
                                 </ThemedText>
                             </TouchableOpacity>
                         </>
                     ) : (
+                        <>
                         <TextInput
                             ref={phoneRef}
-                            style={styles.input}
-                            placeholder="Phone Number (10 digits)"
-                            placeholderTextColor="#94A3B8"
+                            style={[styles.input, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.1)', color: themeColors[isDark ? 'dark' : 'light'].text }]}
+                            placeholder="Phone Number"
+                            placeholderTextColor={isDark ? '#AAAAAA' : '#94A3B8'}
                             value={phoneNumber}
                             onChangeText={setPhoneNumber}
                             keyboardType="phone-pad"
                             testID="phone-input"
-                            maxLength={10}
+                            maxLength={50}
                             accessibilityLabel="Phone number input"
                             returnKeyType="next"
                             onSubmitEditing={() => passwordRef.current?.focus()}
                         />
+                        <TouchableOpacity
+                                onPress={handleCreatePhone}
+                                style={styles.gmailLink}
+                                accessibilityLabel="Use email instead"
+                            >
+                                <ThemedText style={[styles.gmailLinkText, { color: isDark ? themeColors.primary : themeColors.primary }] }>
+                                    Don't have a phone number? Use your email
+                                </ThemedText>
+                            </TouchableOpacity>
+                        </>
                     )}
 
                     <View style={styles.inputContainer}>
                         <View style={styles.passwordContainer}>
                             <TextInput
                                 ref={passwordRef}
-                                style={[styles.input, styles.passwordInput]}
+                                style={[styles.input, styles.passwordInput, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.1)', color: themeColors[isDark ? 'dark' : 'light'].text }]}
                                 placeholder="Password"
-                                placeholderTextColor="#94A3B8"
+                                placeholderTextColor={isDark ? '#AAAAAA' : '#94A3B8'}
                                 value={password}
                                 onChangeText={setPassword}
                                 secureTextEntry={!showPassword}
@@ -406,7 +428,7 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                                 <Ionicons
                                     name={showPassword ? "eye-off" : "eye"}
                                     size={24}
-                                    color="#94A3B8"
+                                    color={isDark ? '#AAAAAA' : '#94A3B8'}
                                 />
                             </TouchableOpacity>
                         </View>
@@ -414,9 +436,9 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                     <View style={styles.passwordContainer}>
                         <TextInput
                             ref={confirmPasswordRef}
-                            style={[styles.input, styles.passwordInput]}
+                            style={[styles.input, styles.passwordInput, { backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.1)', color: themeColors[isDark ? 'dark' : 'light'].text }]}
                             placeholder="Confirm Password"
-                            placeholderTextColor="#94A3B8"
+                            placeholderTextColor={isDark ? '#AAAAAA' : '#94A3B8'}
                             value={confirmPassword}
                             onChangeText={setConfirmPassword}
                             secureTextEntry={!showConfirmPassword}
@@ -434,12 +456,12 @@ export default function RegisterForm({ onboardingData, defaultMethod = 'email' }
                             <Ionicons
                                 name={showConfirmPassword ? "eye-off" : "eye"}
                                 size={24}
-                                color="#94A3B8"
+                                color={isDark ? '#AAAAAA' : '#94A3B8'}
                             />
                         </TouchableOpacity>
                     </View>
                     <TouchableOpacity
-                        style={[styles.button, isLoading && styles.buttonDisabled]}
+                        style={[styles.button, { backgroundColor: isDark ? themeColors.primary : themeColors.primary }, isLoading && styles.buttonDisabled]}
                         onPress={handleRegister}
                         disabled={isLoading}
                         testID="register-button"
@@ -474,7 +496,6 @@ const styles = StyleSheet.create({
     registrationMethodContainer: {
         flexDirection: 'row',
         marginBottom: 16,
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
         borderRadius: 12,
         padding: 4,
     },
@@ -550,5 +571,18 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontSize: 14,
         textDecorationLine: 'underline',
+    },
+    card: {
+        width: '100%',
+        backgroundColor: '#fff',
+        borderRadius: 18,
+        padding: 24,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.10,
+        shadowRadius: 12,
+        elevation: 6,
+        marginBottom: 32,
+        alignSelf: 'center',
     },
 });

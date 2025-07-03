@@ -28,7 +28,6 @@ export const logQuestionAnswer = async (
     const canAnswerDaily = await canAnswerQuestion(customerInfo);
     
     if (!canAnswerDaily) {
-      console.log(`[QuestionReporting] Daily limit reached for question ${questionId}`);
       return { 
         success: false, 
         limitReached: true,
@@ -40,7 +39,6 @@ export const logQuestionAnswer = async (
     const canAnswerLifetime = await canAnswerLifetimeQuestion(customerInfo);
     
     if (!canAnswerLifetime) {
-      console.log(`[QuestionReporting] Lifetime limit reached for question ${questionId}`);
       return { 
         success: false, 
         lifetimeLimitReached: true
@@ -56,10 +54,6 @@ export const logQuestionAnswer = async (
     
     // Increment daily count
     const dailyLimitInfo = await incrementDailyCount();
-    
-    console.log(`[QuestionReporting] Logged answer for question ${questionId}: ${outcome}`);
-    console.log(`[QuestionReporting] Daily count: ${dailyLimitInfo.count}/${dailyLimitInfo.limit}`);
-    console.log(`[QuestionReporting] Lifetime remaining: ${lifetimeUpdate.stats.remainingQuestions}`);
     
     return { 
       success: true, 
@@ -106,7 +100,6 @@ export const logQuestionAnswerWithContext = async (
     const canAnswerDaily = await canAnswerQuestion(customerInfo);
     
     if (!canAnswerDaily) {
-      console.log(`[QuestionReporting] Daily limit reached for question ${questionId}`);
       return { 
         success: false, 
         limitReached: true,
@@ -118,7 +111,6 @@ export const logQuestionAnswerWithContext = async (
     const canAnswerLifetime = await canAnswerLifetimeQuestion(customerInfo);
     
     if (!canAnswerLifetime) {
-      console.log(`[QuestionReporting] Lifetime limit reached for question ${questionId}`);
       return { 
         success: false, 
         lifetimeLimitReached: true
@@ -134,14 +126,6 @@ export const logQuestionAnswerWithContext = async (
     
     // Increment daily count
     const dailyLimitInfo = await incrementDailyCount();
-    
-    console.log(`[QuestionReporting] Logged answer for question ${questionId}: ${outcome}`, {
-      context,
-      timestamp: new Date().toISOString(),
-      dailyCount: dailyLimitInfo.count,
-      dailyLimit: dailyLimitInfo.limit,
-      lifetimeRemaining: lifetimeUpdate.stats.remainingQuestions
-    });
     
     return { 
       success: true, 

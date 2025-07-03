@@ -9,6 +9,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import { logQuestionAnswer } from '@/services/questionReporting';
+import StoreReview from 'expo-store-review';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { handleRateAppPrompt } from './RateAppPromptUtil';
 
 interface MultiStepQuestionProps {
   id: string;
@@ -387,6 +390,11 @@ export function MultiStepQuestion({
       // The outcome is correct only if all steps were answered correctly
       const allStepsCorrect = stepResults.every(result => result === true);
       const result = await logQuestionAnswer(id, allStepsCorrect, customerInfo);
+      
+      // Rate app prompt logic
+      if (allStepsCorrect) {
+        handleRateAppPrompt();
+      }
       
       // Check if daily limit was reached
       if (result.limitReached) {

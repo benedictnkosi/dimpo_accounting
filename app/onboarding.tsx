@@ -1,7 +1,6 @@
 import { HOST_URL } from '@/config/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { analytics } from '@/services/analytics';
-import { completeDeviceRegistration, checkDeviceRegistration, getDeviceId, DeviceRegistrationInfo } from '@/services/deviceRegistration';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +12,8 @@ import { Image, ScrollView, StyleSheet, TouchableOpacity, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 import { ThemedText } from '../components/ThemedText';
+import { Colors } from '@/constants/Colors';
+import { useTheme } from '@/contexts/ThemeContext';
 
 const SUPERHERO_NAMES = [
   'Spider-Man',
@@ -209,128 +210,13 @@ interface FirebaseError extends Error {
   stack?: string;
 }
 
-async function createGuestAccount({ selectedAvatar, signUp }: GuestAccountParams, retryCount = 0): Promise<any> {
-  try {
-    //console.log(`[Guest Account] Attempt ${retryCount + 1}/${MAX_RETRIES} - Starting guest account creation`);
-
-    // Generate a 16-character UID
-    const guestUid = Array.from(crypto.getRandomValues(new Uint8Array(8)))
-      .map(b => b.toString(16).padStart(2, '0'))
-      .join('')
-      .slice(0, 16);
-
-    const guestEmail = `${guestUid}@guest.com`;
-    const defaultPassword = 'password';
-
-    //console.log('[Guest Account] Generated credentials:', { guestEmail });
-
-    // Register the guest user
-    //console.log('[Guest Account] Attempting to sign up with Firebase...');
-    const user = await signUp(guestEmail, defaultPassword);
-    //console.log('[Guest Account] Firebase signup successful:', { uid: user?.uid });
-
-    // Create learner profile for guest
-    const learnerData = {
-      name: getRandomSuperheroName(),
-      email: guestEmail,
-      avatar: selectedAvatar,
-    };
-
-    //console.log('[Guest Account] Created learner data:', learnerData);
-
-    // Create new learner in database using the new API endpoint
-    try {
-      const response = await fetch(`${HOST_URL}/public/learn/learner/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          uid: user.uid,
-          name: learnerData.name,
-          grade: "12", // Default grade for guest users
-          school_name: "Guest School", // Default school name for guest users
-          school_address: "Guest Address", // Default address for guest users
-          school_latitude: 0, // Default latitude for guest users
-          school_longitude: 0, // Default longitude for guest users
-          terms: "1,2,4", // Default terms for guest users
-          curriculum: "CAPS", // Default curriculum for guest users
-          email: learnerData.email,
-          avatar: `${learnerData.avatar}.png` // Ensure avatar has .png extension
-        }),
-      });
-
-      //console.log('[Guest Account] Response:', response);
-
-      if (!response.ok) {
-        console.error('[Guest Account] Failed to create learner profile');
-        console.error('[Guest Account] Response:', response.body);
-        throw new Error('Failed to create learner profile');
-      }
-
-    } catch (error) {
-      console.error('[Guest Account] Error creating learner:', error);
-      // Don't throw here as the user is already registered
-      // Just log the error and continue
-    }
-
-    // Store onboarding data
-    //console.log('[Guest Account] Storing onboarding data...');
-    await AsyncStorage.setItem('onboardingData', JSON.stringify({
-      curriculum: 'CAPS',
-      avatar: selectedAvatar,
-      onboardingCompleted: true,
-      isGuest: true
-    }));
-
-    // Store auth token
-    //console.log('[Guest Account] Storing auth token...');
-    await SecureStore.setItemAsync('auth', JSON.stringify({ user }));
-
-    // Register device with the server
-    try {
-      const deviceRegistrationResult = await completeDeviceRegistration(user.uid);
-      if (deviceRegistrationResult.success) {
-        console.log('[Guest Account] Device registered successfully:', deviceRegistrationResult.deviceId);
-      } else {
-        console.warn('[Guest Account] Device registration failed:', deviceRegistrationResult.message);
-        // Don't block the guest account creation if device registration fails
-      }
-    } catch (deviceError) {
-      console.error('[Guest Account] Error during device registration:', deviceError);
-      // Don't block the guest account creation if device registration fails
-    }
-
-    //console.log('[Guest Account] Guest account creation completed successfully');
-    return user;
-  } catch (error: unknown) {
-    const firebaseError = error as FirebaseError;
-    console.error('[Guest Account] Error details:', {
-      error: firebaseError,
-      errorName: firebaseError.name,
-      errorMessage: firebaseError.message,
-      errorCode: firebaseError.code,
-      errorStack: firebaseError.stack,
-      retryCount,
-      timestamp: new Date().toISOString()
-    });
-
-    if (retryCount < MAX_RETRIES) {
-      //console.log(`[Guest Account] Retrying in ${RETRY_DELAY}ms... (Attempt ${retryCount + 1}/${MAX_RETRIES})`);
-      // Wait before retrying
-      await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-      return createGuestAccount({ selectedAvatar, signUp }, retryCount + 1);
-    }
-    throw error;
-  }
-}
-
 export default function OnboardingScreen() {
   const [step, setStep] = useState(0);
   const [selectedAvatar, setSelectedAvatar] = useState<string>('1');
   const [registrationMethod, setRegistrationMethod] = useState<'email' | 'phone'>('email');
   const insets = useSafeAreaInsets();
   const { signUp } = useAuth();
+  const { isDark } = useTheme();
 
   const [errors, setErrors] = useState({
     curriculum: ''
@@ -338,9 +224,10 @@ export default function OnboardingScreen() {
 
   const [disclaimerAccepted, setDisclaimerAccepted] = useState(false);
   
-  // Device registration state
-  const [deviceInfo, setDeviceInfo] = useState<DeviceRegistrationInfo | null>(null);
-  const [isCheckingDevice, setIsCheckingDevice] = useState(true);
+  // Only one declaration for these colors, using 'Colors'
+  const titleColor = isDark ? '#FFFFFF' : Colors.light.text;
+  const descriptionColor = isDark ? '#E2E8F0' : '#333333';
+  const buttonTextColor = isDark ? '#FFFFFF' : '#4d5ad3';
 
   useEffect(() => {
     async function checkAuthAndOnboarding() {
@@ -359,30 +246,12 @@ export default function OnboardingScreen() {
       }
     }
 
-    async function checkDeviceRegistrationStatus() {
-      try {
-        setIsCheckingDevice(true);
-        const deviceId = await getDeviceId();
-        const deviceRegistrationInfo = await checkDeviceRegistration(deviceId);
-        
-        if (deviceRegistrationInfo) {
-          setDeviceInfo(deviceRegistrationInfo);
-          console.log('[Onboarding] Device already registered with email:', deviceRegistrationInfo.learnerEmail);
-        }
-      } catch (error) {
-        console.error('[Onboarding] Error checking device registration:', error);
-      } finally {
-        setIsCheckingDevice(false);
-      }
-    }
-
     checkAuthAndOnboarding();
-    checkDeviceRegistrationStatus();
   }, []);
 
   // Track onboarding screen view
   useEffect(() => {
-    analytics.track('langauges_onboarding_started', {
+    analytics.track('accounting_onboarding_started', {
       step_number: step,
       step_name: getStepName(step)
     });
@@ -418,7 +287,7 @@ export default function OnboardingScreen() {
   const handleComplete = async () => {
     try {
       // Track onboarding completion through registration
-      analytics.track('langauges_onboarding_completed', {
+      analytics.track('accounting_onboarding_completed', {
         method: 'registration',
         avatar_id: selectedAvatar,
         total_steps: 6
@@ -456,84 +325,38 @@ export default function OnboardingScreen() {
       case 0:
         return (
           <View style={[styles.step, { justifyContent: 'flex-start', paddingTop: 40 }]} testID="welcome-step">
-            {!deviceInfo && (
-              <>
-                <View style={{ width: '100%', height: 340, marginBottom: 40, justifyContent: 'center', alignItems: 'center', paddingTop: 40 }}>
-                  <ThemedText style={{ fontSize: 120, paddingTop: 120 }} testID="welcome-emoji">
-                    📊
-                  </ThemedText>
-                </View>
-                <View style={[styles.textContainer, { paddingHorizontal: 20 }]} testID="welcome-text-container">
-                  <ThemedText style={[styles.welcomeTitle, { fontSize: 24, marginBottom: 24 }]} testID="welcome-title">
-                    Welcome to Dimpo Accounting
-                  </ThemedText>
-                  <ThemedText style={[styles.welcomeText, { fontSize: 20, lineHeight: 32, marginBottom: 24 }]} testID="welcome-description">
-                    📊 Master accounting concepts with fun, interactive lessons! From Financial Statements to Ratio Analysis, we've got you covered.
-                  </ThemedText>
-                </View>
-              </>
-            )}
-            {/* Device Registration Info */}
-            {isCheckingDevice && (
-              <View style={styles.deviceInfoContainer}>
-                <ThemedText style={styles.deviceInfoText}>
-                  Checking device registration...
-                </ThemedText>
-              </View>
-            )}
-            {!isCheckingDevice && deviceInfo && (
-              <View style={styles.deviceInfoContainer}>
-                <ThemedText style={styles.deviceInfoTitle}>
-                  📱 Device Already Registered
-                </ThemedText>
-                <View style={{ height: 8 }} />
-                <ThemedText style={styles.deviceInfoText}>
-                  This device is linked to:
-                </ThemedText>
-                <ThemedText style={styles.deviceInfoEmail}>
-                  {deviceInfo.learnerEmail}
-                </ThemedText>
-                <View style={styles.deviceInfoDivider} />
-                <ThemedText style={styles.deviceInfoSubtext}>
-                  Registered on: {new Date(deviceInfo.registrationDate).toLocaleDateString()}
-                </ThemedText>
-                <ThemedText style={styles.deviceInfoWarning}>
-                  Please login to continue using this device.
-                </ThemedText>
-                <TouchableOpacity
-                  style={styles.continueWithAccountButton}
-                  onPress={() => {
-                    // Navigate to login with the email pre-filled
-                    router.push({
-                      pathname: '/login',
-                      params: {
-                        email: deviceInfo.learnerEmail
-                      }
-                    });
-                  }}
-                  testID="continue-with-account-button"
-                >
-                  <ThemedText style={styles.continueWithAccountButtonText}>
-                    Login
-                  </ThemedText>
-                </TouchableOpacity>
-              </View>
-            )}
+            <View style={{ width: '100%', height: 340, marginBottom: 40, justifyContent: 'center', alignItems: 'center', paddingTop: 40 }}>
+              <Image
+                source={require('@/assets/images/onboarding/welcome.png')}
+                style={{ width: 240, height: 240, resizeMode: 'contain', marginTop: 120 }}
+                testID="welcome-image"
+              />
+            </View>
+            <View style={[styles.textContainer, { paddingHorizontal: 20 }]} testID="welcome-text-container">
+              <ThemedText style={[styles.welcomeTitle, { fontSize: 24, marginBottom: 24, color: titleColor }]} testID="welcome-title">
+                Welcome to Dimpo Accounting
+              </ThemedText>
+              <ThemedText style={[styles.welcomeText, { fontSize: 20, lineHeight: 32, marginBottom: 24, color: descriptionColor }]} testID="welcome-description">
+                📊 Master accounting concepts with fun, interactive lessons! From Financial Statements to Ratio Analysis, we've got you covered.
+              </ThemedText>
+            </View>
           </View>
         );
       case 1:
         return (
           <View style={[styles.step, { justifyContent: 'flex-start', paddingTop: 40 }]} testID="topics-step">
             <View style={{ width: '100%', height: 340, marginBottom: 40, justifyContent: 'center', alignItems: 'center', paddingTop: 40 }}>
-              <ThemedText style={{ fontSize: 120, paddingTop: 120  }} testID="topics-emoji">
-                💰
-              </ThemedText>
+              <Image
+                source={require('@/assets/images/onboarding/topics.png')}
+                style={{ width: 240, height: 240, resizeMode: 'contain', marginTop: 120 }}
+                testID="topics-image"
+              />
             </View>
             <View style={[styles.textContainer, { paddingHorizontal: 20 }]} testID="topics-text-container">
-              <ThemedText style={[styles.welcomeTitle, { fontSize: 26, marginBottom: 20 }]} testID="topics-title">
+              <ThemedText style={[styles.welcomeTitle, { fontSize: 26, marginBottom: 20, color: titleColor }]} testID="topics-title">
                 Learn 6 Core Accounting Topics
               </ThemedText>
-              <ThemedText style={[styles.welcomeText, { fontSize: 18, lineHeight: 28, marginBottom: 20 }]} testID="topics-description">
+              <ThemedText style={[styles.welcomeText, { fontSize: 18, lineHeight: 28, marginBottom: 20, color: descriptionColor }]} testID="topics-description">
                 📊 Master Financial Statements, Cash Flow, Ratio Analysis, and more! Our app makes learning accounting fun and easy.
               </ThemedText>
             </View>
@@ -543,15 +366,17 @@ export default function OnboardingScreen() {
         return (
           <View style={[styles.step, { justifyContent: 'flex-start', paddingTop: 40 }]} testID="practice-step">
             <View style={{ width: '100%', height: 340, marginBottom: 40, justifyContent: 'center', alignItems: 'center', paddingTop: 40 }}>
-              <ThemedText style={{ fontSize: 120 , paddingTop: 120 }} testID="practice-emoji">
-                ✍️
-              </ThemedText>
+              <Image
+                source={require('@/assets/images/onboarding/practice.png')}
+                style={{ width: 240, height: 240, resizeMode: 'contain', marginTop: 120 }}
+                testID="practice-image"
+              />
             </View>
             <View style={[styles.textContainer, { paddingHorizontal: 20 }]} testID="practice-text-container">
-              <ThemedText style={[styles.welcomeTitle, { fontSize: 26, marginBottom: 20 }]} testID="practice-title">
+              <ThemedText style={[styles.welcomeTitle, { fontSize: 26, marginBottom: 20, color: titleColor }]} testID="practice-title">
                 Interactive Practice
               </ThemedText>
-              <ThemedText style={[styles.welcomeText, { fontSize: 18, lineHeight: 28, marginBottom: 20 }]} testID="practice-description">
+              <ThemedText style={[styles.welcomeText, { fontSize: 18, lineHeight: 28, marginBottom: 20, color: descriptionColor }]} testID="practice-description">
                 ✍️ Practice calculations, analysis, and problem-solving with our interactive exercises. Perfect your accounting skills!
               </ThemedText>
             </View>
@@ -561,15 +386,17 @@ export default function OnboardingScreen() {
         return (
           <View style={[styles.step, { justifyContent: 'flex-start', paddingTop: 40 }]} testID="examples-step">
             <View style={{ width: '100%', height: 340, marginBottom: 40, justifyContent: 'center', alignItems: 'center', paddingTop: 50 }}>
-              <ThemedText style={{ fontSize: 120, paddingTop: 120 }} testID="examples-emoji">
-                📈
-              </ThemedText>
+              <Image
+                source={require('@/assets/images/onboarding/realworld.png')}
+                style={{ width: 240, height: 240, resizeMode: 'contain', marginTop: 120 }}
+                testID="examples-image"
+              />
             </View>
             <View style={[styles.textContainer, { paddingHorizontal: 20 }]} testID="examples-text-container">
-              <ThemedText style={[styles.welcomeTitle, { fontSize: 26, marginBottom: 20 }]} testID="examples-title">
+              <ThemedText style={[styles.welcomeTitle, { fontSize: 26, marginBottom: 20, color: titleColor }]} testID="examples-title">
                 Real-World Examples
               </ThemedText>
-              <ThemedText style={[styles.welcomeText, { fontSize: 18, lineHeight: 28, marginBottom: 20 }]} testID="examples-description">
+              <ThemedText style={[styles.welcomeText, { fontSize: 18, lineHeight: 28, marginBottom: 20, color: descriptionColor }]} testID="examples-description">
                 📈 Learn with real-world examples and case studies. Understand how accounting principles apply in practice!
               </ThemedText>
             </View>
@@ -580,10 +407,10 @@ export default function OnboardingScreen() {
         return (
           <View style={styles.step} testID="avatar-step">
             <View style={styles.textContainer}>
-              <ThemedText style={styles.stepTitle}>
+              <ThemedText style={[styles.stepTitle, { color: titleColor }]}>
                 Choose Your Avatar
               </ThemedText>
-              <ThemedText style={styles.stepSubtitle}>
+              <ThemedText style={[styles.stepSubtitle, { color: descriptionColor }]}>
                 Select an avatar to represent you in the app
               </ThemedText>
             </View>
@@ -645,10 +472,6 @@ export default function OnboardingScreen() {
   };
 
   const canProceed = () => {
-    // Block progression if device is already registered
-    if (deviceInfo) {
-      return false;
-    }
     switch (step) {
       case 0:
       case 1:
@@ -664,39 +487,18 @@ export default function OnboardingScreen() {
 
   return (
     <LinearGradient
-      colors={['#1B1464', '#2B2F77']}
+      colors={
+        isDark
+          ? ['#1B1464', '#2B2F77']
+          : ['#F5F7FA', '#E4ECF7']
+      }
       style={[styles.container, { paddingTop: insets.top }]}
     >
       <View style={styles.content}>
-        {/* Device Registration Banner */}
-        {!isCheckingDevice && deviceInfo && step > 0 && (
-          <View style={styles.deviceRegistrationBanner}>
-            <ThemedText style={styles.deviceRegistrationBannerText}>
-              📱 Device linked to {deviceInfo.learnerEmail} - Login required
-            </ThemedText>
-            <TouchableOpacity
-              style={styles.deviceRegistrationBannerButton}
-              onPress={() => {
-                router.push({
-                  pathname: '/login',
-                  params: {
-                    email: deviceInfo.learnerEmail
-                  }
-                });
-              }}
-            >
-              <ThemedText style={styles.deviceRegistrationBannerButtonText}>
-                Login
-              </ThemedText>
-            </TouchableOpacity>
-          </View>
-        )}
-        
         <View style={styles.stepContainer}>
           {renderStep()}
         </View>
-
-        {(step < 4) && !deviceInfo && (
+        {(step < 4) && (
           <View style={styles.buttonContainer} testID="navigation-buttons">
             {step === 0 ? (
               <>
@@ -707,13 +509,13 @@ export default function OnboardingScreen() {
                   }}
                   testID="login-button"
                 >
-                  <ThemedText style={styles.buttonText}>Back</ThemedText>
+                  <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>Login</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.button, styles.primaryButton]}
                   onPress={() => {
                     // Track onboarding start
-                    analytics.track('langauges_onboarding_started', {
+                    analytics.track('accounting_onboarding_started', {
                       step_number: 1,
                       step_name: 'welcome'
                     });
@@ -735,13 +537,13 @@ export default function OnboardingScreen() {
                   }}
                   testID="previous-step-button"
                 >
-                  <ThemedText style={styles.buttonText}>Back</ThemedText>
+                  <ThemedText style={[styles.buttonText, { color: buttonTextColor }]}>Back</ThemedText>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[
                     styles.button,
                     styles.primaryButton,
-                    (!canProceed() || !!deviceInfo) && styles.buttonDisabled
+                    !canProceed() && styles.buttonDisabled
                   ]}
                   onPress={handleNextStep}
                   disabled={!canProceed()}
@@ -750,7 +552,7 @@ export default function OnboardingScreen() {
                   <ThemedText style={[
                     styles.buttonText,
                     styles.primaryButtonText,
-                    (!canProceed() || !!deviceInfo) && styles.buttonTextDisabled
+                    !canProceed() && styles.buttonTextDisabled
                   ]}>
                     Next! 🚀
                   </ThemedText>
@@ -787,6 +589,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     marginBottom: 20,
+    // backgroundColor: undefined, // Remove any hardcoded background
   },
   illustration: {
     width: '60%',
@@ -1573,7 +1376,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   deviceInfoContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
     borderRadius: 20,
     padding: 24,
     marginHorizontal: 16,
@@ -1632,7 +1434,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   deviceRegistrationBanner: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     borderRadius: 16,
     padding: 20,
     marginHorizontal: 16,
