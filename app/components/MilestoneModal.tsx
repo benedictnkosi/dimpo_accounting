@@ -122,7 +122,7 @@ export function MilestoneModal({
                 Questions Remaining
               </ThemedText>
               <ThemedText style={[styles.remainingCount, { color: config.borderColor }]}>
-                {milestone === '75' ? '25' : milestone === '50' ? '50' : '25'}
+                {milestone === '75' ? '15' : milestone === '50' ? '30' : '15'}
               </ThemedText>
             </View>
 

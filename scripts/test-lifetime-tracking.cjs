@@ -42,23 +42,23 @@ async function testLifetimeTracking() {
     // Test milestone notifications
     console.log('\n🎯 Testing milestone notifications...');
     
-    // Test 75% milestone (25 questions remaining)
-    console.log('\n📈 Testing 75% milestone (25 questions remaining)...');
-    const milestone75 = await checkMilestoneNotification(25);
+    // Test 75% milestone (15 questions remaining)
+    console.log('\n📈 Testing 75% milestone (15 questions remaining)...');
+    const milestone75 = await checkMilestoneNotification(15);
     console.log('  - Should show:', milestone75.shouldShow);
     console.log('  - Milestone:', milestone75.milestone);
     console.log('  - Message:', milestone75.message);
     
-    // Test 50% milestone (50 questions remaining)
-    console.log('\n📊 Testing 50% milestone (50 questions remaining)...');
-    const milestone50 = await checkMilestoneNotification(50);
+    // Test 50% milestone (30 questions remaining)
+    console.log('\n📊 Testing 50% milestone (30 questions remaining)...');
+    const milestone50 = await checkMilestoneNotification(30);
     console.log('  - Should show:', milestone50.shouldShow);
     console.log('  - Milestone:', milestone50.milestone);
     console.log('  - Message:', milestone50.message);
     
-    // Test 25% milestone (25 questions remaining)
-    console.log('\n🚨 Testing 25% milestone (25 questions remaining)...');
-    const milestone25 = await checkMilestoneNotification(25);
+    // Test 25% milestone (15 questions remaining)
+    console.log('\n🚨 Testing 25% milestone (15 questions remaining)...');
+    const milestone25 = await checkMilestoneNotification(15);
     console.log('  - Should show:', milestone25.shouldShow);
     console.log('  - Milestone:', milestone25.milestone);
     console.log('  - Message:', milestone25.message);
@@ -66,9 +66,9 @@ async function testLifetimeTracking() {
     // Simulate answering questions to reach milestones
     console.log('\n🔄 Simulating question answers...');
     
-    // Answer 75 questions (should trigger 75% milestone)
-    console.log('\n📝 Answering 75 questions...');
-    for (let i = 0; i < 75; i++) {
+    // Answer 45 questions (should trigger 75% milestone)
+    console.log('\n📝 Answering 45 questions...');
+    for (let i = 0; i < 45; i++) {
       const result = await updateLifetimeStats(true);
       if (result.milestoneNotification?.shouldShow) {
         console.log(`  🎉 Milestone reached at question ${i + 1}:`, result.milestoneNotification.milestone);
@@ -76,39 +76,29 @@ async function testLifetimeTracking() {
       }
     }
     
-    // Check stats after 75 questions
-    const stats75 = await getLifetimeStats();
-    console.log('\n📊 Stats after 75 questions:');
-    console.log('  - Total answered:', stats75.totalQuestionsAnswered);
-    console.log('  - Remaining questions:', stats75.remainingQuestions);
-    console.log('  - Is limit reached:', stats75.isLimitReached);
+    // Check stats after 45 questions
+    const stats45 = await getLifetimeStats();
+    console.log('\n📊 Stats after 45 questions:');
+    console.log('  - Total answered:', stats45.totalQuestionsAnswered);
+    console.log('  - Remaining questions:', stats45.remainingQuestions);
+    console.log('  - Is limit reached:', stats45.isLimitReached);
     
     // Answer 15 more questions (should trigger 50% milestone)
     console.log('\n📝 Answering 15 more questions...');
     for (let i = 0; i < 15; i++) {
       const result = await updateLifetimeStats(true);
       if (result.milestoneNotification?.shouldShow) {
-        console.log(`  🎉 Milestone reached at question ${75 + i + 1}:`, result.milestoneNotification.milestone);
+        console.log(`  🎉 Milestone reached at question ${45 + i + 1}:`, result.milestoneNotification.milestone);
         console.log(`  📢 Message:`, result.milestoneNotification.message);
       }
     }
     
-    // Check stats after 90 questions
-    const stats90 = await getLifetimeStats();
-    console.log('\n📊 Stats after 90 questions:');
-    console.log('  - Total answered:', stats90.totalQuestionsAnswered);
-    console.log('  - Remaining questions:', stats90.remainingQuestions);
-    console.log('  - Is limit reached:', stats90.isLimitReached);
-    
-    // Answer 10 more questions (should trigger 25% milestone)
-    console.log('\n📝 Answering 10 more questions...');
-    for (let i = 0; i < 10; i++) {
-      const result = await updateLifetimeStats(true);
-      if (result.milestoneNotification?.shouldShow) {
-        console.log(`  🎉 Milestone reached at question ${90 + i + 1}:`, result.milestoneNotification.milestone);
-        console.log(`  📢 Message:`, result.milestoneNotification.message);
-      }
-    }
+    // Check stats after 60 questions
+    const stats60 = await getLifetimeStats();
+    console.log('\n📊 Stats after 60 questions:');
+    console.log('  - Total answered:', stats60.totalQuestionsAnswered);
+    console.log('  - Remaining questions:', stats60.remainingQuestions);
+    console.log('  - Is limit reached:', stats60.isLimitReached);
     
     // Check final stats
     const finalStats = await getLifetimeStats();

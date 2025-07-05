@@ -79,30 +79,35 @@ export const checkMilestoneNotification = async (remainingQuestions: number): Pr
   try {
     const notifications = await getMilestoneNotifications();
     
-    if (remainingQuestions <= 25 && !notifications.milestone25) {
+    // For 60-question limit:
+    // 75% milestone: 15 questions remaining (after 45 questions)
+    // 50% milestone: 30 questions remaining (after 30 questions) 
+    // 25% milestone: 15 questions remaining (after 45 questions)
+    
+    if (remainingQuestions <= 15 && !notifications.milestone25) {
       await saveMilestoneNotifications({ ...notifications, milestone25: true });
       return {
         shouldShow: true,
         milestone: '25',
-        message: 'Only 25 questions remaining! Consider upgrading to Premium for unlimited access.'
+        message: 'Only 15 questions remaining! Consider upgrading to Premium for unlimited access.'
       };
     }
     
-    if (remainingQuestions <= 50 && !notifications.milestone50) {
+    if (remainingQuestions <= 30 && !notifications.milestone50) {
       await saveMilestoneNotifications({ ...notifications, milestone50: true });
       return {
         shouldShow: true,
         milestone: '50',
-        message: 'Halfway through your free questions! Only 50 questions remaining.'
+        message: 'Halfway through your free questions! Only 30 questions remaining.'
       };
     }
     
-    if (remainingQuestions <= 75 && !notifications.milestone75) {
+    if (remainingQuestions <= 45 && !notifications.milestone75) {
       await saveMilestoneNotifications({ ...notifications, milestone75: true });
       return {
         shouldShow: true,
         milestone: '75',
-        message: '75% of your free questions used! Only 25 questions remaining.'
+        message: '75% of your free questions used! Only 15 questions remaining.'
       };
     }
     
