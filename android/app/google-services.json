@@ -1,26 +1,115 @@
 {
   "project_info": {
-    "project_number": "528892435856",
-    "project_id": "southafricanlanguages",
-    "storage_bucket": "southafricanlanguages.firebasestorage.app"
+    "project_number": "53521587720",
+    "project_id": "matric-unlocked",
+    "storage_bucket": "matric-unlocked.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:528892435856:android:a656fc9a0d0d1189b56715",
+        "mobilesdk_app_id": "1:53521587720:android:c99f295d40b2ddf3413bbd",
         "android_client_info": {
           "package_name": "com.accountingtutor"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "53521587720-dnvm4id4m69h6epcoqer7u6i4u8869ka.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
-          "current_key": "AIzaSyBcwBF12SCgbqo2XnY5B5adKO7ZxjKaJlg"
+          "current_key": "AIzaSyCK3sSp7T3tu2uzw_XUza0PA7JqxUPlX5U"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "53521587720-dnvm4id4m69h6epcoqer7u6i4u8869ka.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "53521587720-c25viiurgtvj1tlifckglbru55oe6d0v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "za.co.matricunlocked"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:53521587720:android:832834e21ef5c0af413bbd",
+        "android_client_info": {
+          "package_name": "za.co.examquizafrica"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "53521587720-dnvm4id4m69h6epcoqer7u6i4u8869ka.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCK3sSp7T3tu2uzw_XUza0PA7JqxUPlX5U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "53521587720-dnvm4id4m69h6epcoqer7u6i4u8869ka.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "53521587720-c25viiurgtvj1tlifckglbru55oe6d0v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "za.co.matricunlocked"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:53521587720:android:9f238a92a908593c413bbd",
+        "android_client_info": {
+          "package_name": "za.co.matricunlocked"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "53521587720-dnvm4id4m69h6epcoqer7u6i4u8869ka.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCK3sSp7T3tu2uzw_XUza0PA7JqxUPlX5U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "53521587720-dnvm4id4m69h6epcoqer7u6i4u8869ka.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "53521587720-c25viiurgtvj1tlifckglbru55oe6d0v.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "za.co.matricunlocked"
+              }
+            }
+          ]
         }
       }
     }

@@ -43,7 +43,13 @@ export default {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#ffffff',
     },
-    permissions: ["NOTIFICATIONS"]
+    permissions: ["NOTIFICATIONS"],
+    // Firebase Analytics merges AD_ID; block it so Play Console does not flag advertising ID use.
+    blockedPermissions: [
+      'com.google.android.gms.permission.AD_ID',
+      'android.permission.ACCESS_ADSERVICES_AD_ID',
+      'android.permission.ACCESS_ADSERVICES_ATTRIBUTION',
+    ],
   },
   web: {
     bundler: 'metro',

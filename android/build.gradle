@@ -18,7 +18,6 @@ buildscript {
         classpath('com.android.tools.build:gradle')
         classpath('com.facebook.react:react-native-gradle-plugin')
         classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion")
-        classpath('com.google.gms:google-services:4.4.2')
     }
 }
 
@@ -38,12 +37,5 @@ allprojects {
         google()
         mavenCentral()
         maven { url 'https://www.jitpack.io' }
-    }
-
-    // RevenueCat 10 / Billing Library 8 ship Kotlin 2.1 metadata; Expo 52 needs Kotlin 2.0.21.
-    tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-        kotlinOptions {
-            freeCompilerArgs += ["-Xskip-metadata-version-check"]
-        }
     }
 }

@@ -91,8 +91,8 @@ android {
         applicationId 'com.accountingtutor'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1011
-        versionName "1.0.11"
+        versionCode 1013
+        versionName "1.0.13"
     }
     signingConfigs {
         debug {

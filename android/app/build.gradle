@@ -91,8 +91,8 @@ android {
         applicationId 'com.accountingtutor'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 3
-        versionName "4"
+        versionCode 1013
+        versionName "1.0.13"
     }
     signingConfigs {
         debug {
@@ -180,5 +180,3 @@ dependencies {
         implementation jscFlavor
     }
 }
-
-apply plugin: 'com.google.gms.google-services'
