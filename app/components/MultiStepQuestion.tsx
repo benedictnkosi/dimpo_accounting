@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable, Modal } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSound } from '../contexts/SoundContext';
+import { brand } from '@/constants/matric';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 
 interface MultiStepQuestionProps {
   id: string;
@@ -19,6 +18,7 @@ interface MultiStepQuestionProps {
   }[];
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
 // Utility function to parse HTML tables
@@ -237,9 +237,9 @@ export function MultiStepQuestion({
   steps,
   onContinue,
   setIsQuestionAnswered,
+  onAttempt,
 }: MultiStepQuestionProps) {
   const { colors } = useTheme();
-  const { soundEnabled } = useSound();
   const [currentStep, setCurrentStep] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -250,45 +250,6 @@ export function MultiStepQuestion({
   const [stepFeedbacks, setStepFeedbacks] = useState<(string | null)[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[][]>([]);
   const [showPreviousAnswers, setShowPreviousAnswers] = useState(false);
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    // Only play sound if sound is enabled
-    if (!soundEnabled) return;
-    
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundRef.current = soundObject;
-      // Unload after playback
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-          soundRef.current = null;
-        }
-      });
-    } catch (e) {
-      // fail silently
-    }
-  };
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   useEffect(() => {
     setCurrentStep(0);
@@ -321,10 +282,7 @@ export function MultiStepQuestion({
     setSelected(value);
     setIsAnswered(true);
     const isCorrect = value === steps[currentStep].answer;
-    
-    // Play sound feedback
-    playFeedbackSound(isCorrect ? 'correct' : 'wrong');
-    
+    onAttempt?.(`step-${currentStep}`, isCorrect);
     const feedbackMsg = isCorrect ? 'Correct! 🎉' : `Incorrect. The answer is "${steps[currentStep].answer}"`;
     setFeedback(feedbackMsg);
     setStepResults(prev => {
@@ -401,10 +359,10 @@ export function MultiStepQuestion({
       ];
     }
     if (value === steps[currentStep].answer) {
-      return [styles.buttonText, { color: '#22223B', fontWeight: '700' as const }];
+      return [styles.buttonText, { color: brand.text, fontWeight: '700' as const }];
     }
     if (selected === value && value !== steps[currentStep].answer) {
-      return [styles.buttonText, { color: '#22223B', fontWeight: '700' as const }];
+      return [styles.buttonText, { color: brand.text, fontWeight: '700' as const }];
     }
     return [styles.buttonText, { color: colors.textSecondary }];
   };
@@ -426,7 +384,7 @@ export function MultiStepQuestion({
   return (
     <View style={styles.outerContainer}>
       <LinearGradient
-        colors={['#f0f9ff', '#e0e7ff']}
+        colors={[brand.card, brand.cardElevated]}
         style={styles.card}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -509,6 +467,18 @@ export function MultiStepQuestion({
             )}
           </View>
         )}
+
+        {isAnswered && currentStep === steps.length - 1 && (
+          <View style={styles.finishBanner}>
+            <ThemedText style={[styles.completion, { color: colors.success }]}>
+              You finished this question!
+            </ThemedText>
+            <ThemedText style={styles.finishStatsText}>
+              {stepResults.filter(Boolean).length} correct ·{' '}
+              {stepResults.filter((value) => value === false).length} incorrect
+            </ThemedText>
+          </View>
+        )}
         
         {isAnswered && !completed && (
           <View style={styles.navigationButtonsContainer}>
@@ -534,7 +504,7 @@ export function MultiStepQuestion({
                 style={{ flex: 1, marginLeft: currentStep > 0 ? 8 : 0 }}
                 onPress={handleContinue}
                 accessibilityRole="button"
-                accessibilityLabel={currentStep === steps.length - 1 ? "Complete Question" : "Next Step"}
+                accessibilityLabel={currentStep === steps.length - 1 ? "Next question" : "Next Step"}
               >
                 <LinearGradient
                   colors={[colors.primary, '#22c55e']}
@@ -543,7 +513,7 @@ export function MultiStepQuestion({
                   end={{ x: 1, y: 0 }}
                 >
                   <ThemedText style={styles.nextButtonText}>
-                    {currentStep === steps.length - 1 ? 'Continue' : 'Next'}
+                    {currentStep === steps.length - 1 ? 'Next question' : 'Next'}
                   </ThemedText>
                 </LinearGradient>
               </Pressable>
@@ -565,7 +535,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 8,
-    backgroundColor: '#F6F8FA',
+    backgroundColor: 'transparent',
   },
   card: {
     width: '100%',
@@ -577,7 +547,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 12,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     marginVertical: 24,
     alignItems: 'center',
   },
@@ -595,7 +565,7 @@ const styles = StyleSheet.create({
   progressBarBg: {
     width: '100%',
     height: 6,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: brand.cardElevated,
     borderRadius: 3,
     marginTop: 4,
     marginBottom: 2,
@@ -632,7 +602,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     marginBottom: 18,
-    color: '#22223B',
+    color: brand.text,
     lineHeight: 28,
     letterSpacing: 0.1,
   },
@@ -650,7 +620,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     minHeight: 60,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -664,7 +634,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   correctButton: {
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     borderColor: '#22c55e',
     shadowColor: '#22C55E',
     shadowOffset: { width: 0, height: 4 },
@@ -673,7 +643,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   incorrectButton: {
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     borderColor: '#EF4444',
     shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 4 },
@@ -692,7 +662,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     flex: 1,
-    color: '#22223B',
+    color: brand.text,
   },
   feedbackContainer: {
     marginTop: 18,
@@ -757,40 +727,58 @@ const styles = StyleSheet.create({
     marginTop: 16,
     color: '#22C55E',
   },
+  finishBanner: {
+    width: '100%',
+    marginTop: 12,
+    marginBottom: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.28)',
+    padding: 14,
+    alignItems: 'center',
+  },
+  finishStatsText: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '700',
+    color: brand.textSecondary,
+    textAlign: 'center',
+  },
   tableContainer: {
     width: '100%',
     marginVertical: 12,
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
-    backgroundColor: '#FFFFFF',
+    borderColor: brand.border,
+    backgroundColor: brand.card,
   },
   tableRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: brand.border,
   },
   tableCell: {
     flex: 1,
     padding: 12,
     borderRightWidth: 1,
-    borderRightColor: '#E5E7EB',
+    borderRightColor: brand.border,
     justifyContent: 'center',
     alignItems: 'center',
   },
   tableHeader: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: brand.cardElevated,
   },
   tableHeaderText: {
     fontWeight: '700',
     fontSize: 14,
-    color: '#374151',
+    color: brand.textSecondary,
   },
   tableCellText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6B7280',
+    color: brand.textSecondary,
     textAlign: 'center',
   },
   previousAnswersContainer: {
@@ -800,30 +788,30 @@ const styles = StyleSheet.create({
   previousAnswersTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#22223B',
+    color: brand.text,
     marginBottom: 12,
     textAlign: 'center',
   },
   previousAnswersTable: {
     width: '100%',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: brand.border,
     borderRadius: 8,
     overflow: 'hidden',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: brand.card,
   },
   previousAnswersHeader: {
     flexDirection: 'row',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: brand.cardElevated,
     paddingVertical: 10,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: brand.border,
   },
   previousAnswersHeaderText: {
     fontWeight: '700',
     fontSize: 12,
-    color: '#374151',
+    color: brand.textSecondary,
     textAlign: 'center',
   },
   previousAnswersRow: {
@@ -831,7 +819,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E7EB',
+    borderBottomColor: brand.border,
   },
   previousAnswersCell: {
     flex: 1,
@@ -842,7 +830,7 @@ const styles = StyleSheet.create({
   previousAnswersCellText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#6B7280',
+    color: brand.textSecondary,
     textAlign: 'center',
   },
   previousAnswersToggle: {
@@ -852,11 +840,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: brand.border,
     borderRadius: 12,
     marginTop: 12,
     marginBottom: 8,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: brand.cardElevated,
   },
   previousAnswersToggleText: {
     fontSize: 14,

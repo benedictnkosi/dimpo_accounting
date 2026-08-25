@@ -21,7 +21,7 @@ extensions.configure(com.facebook.react.ReactSettingsExtension) { ex ->
   }
 }
 
-rootProject.name = 'Dimpo Languages'
+rootProject.name = 'Accounting CPA QUIZ'
 
 dependencyResolutionManagement {
   versionCatalogs {

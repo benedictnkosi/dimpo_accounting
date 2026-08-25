@@ -14,8 +14,8 @@ This guide will help you set up RevenueCat properly for both development and pro
 
 1. **Create a new app** in RevenueCat dashboard
 2. **Add your app's bundle ID**:
-   - iOS: `com.dimpolanguages`
-   - Android: `com.dimpolanguages`
+   - iOS: `com.dimpoaccounting`
+   - Android: `com.accountingtutor`
 3. **Configure API Keys**:
    - Copy the API keys from RevenueCat dashboard
    - Update them in `config/revenueCat.ts`
@@ -31,7 +31,7 @@ This guide will help you set up RevenueCat properly for both development and pro
    - `premium_yearly_sub` (Subscription)
 
 #### In App Store Connect (iOS):
-1. Go to **My Apps** → **Dimpo Languages**
+1. Go to **My Apps** → **Dimpo Accounting**
 2. Navigate to **Features** → **In-App Purchases**
 3. Create products with the same IDs as in RevenueCat
 4. Set pricing and descriptions
@@ -54,7 +54,7 @@ This guide will help you set up RevenueCat properly for both development and pro
 
 #### iOS Development:
 1. **StoreKit Configuration File**: 
-   - The file `ios/DimpoLanguages/Configuration.storekit` is already created
+   - The file `ios/DimpoAccounting/Configuration.storekit` is already created
    - Open it in Xcode to configure test products
    - Update product IDs to match your RevenueCat configuration
 

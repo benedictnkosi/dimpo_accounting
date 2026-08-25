@@ -1,3 +1,4 @@
+import '../utils/crypto-polyfill';
 import { app } from '@/config/firebase';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { FeedbackProvider } from './contexts/FeedbackContext';
@@ -8,12 +9,13 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { router, SplashScreen, Stack } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { LogBox, StyleSheet } from 'react-native';
+import { LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import AuthLayout from './_auth';
 import { SoundProvider } from './contexts/SoundContext';
+import { styles } from '@/styles/global';
 
 // Suppress shadow warnings
 LogBox.ignoreLogs([
@@ -96,17 +98,9 @@ function RootLayoutNav() {
                 contentStyle: { backgroundColor: colors.background }
               }}
             >
-              <Stack.Screen name="login" options={{ headerShown: false }} />
-              <Stack.Screen name="register" options={{ headerShown: false }} />
-              <Stack.Screen name="onboarding" options={{ headerShown: false }} />
               <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen
-                name="lessons"
-                options={{
-                  headerShown: false,
-                  presentation: 'card'
-                }}
-              />
+              <Stack.Screen name="practice" options={{ headerShown: false }} />
+              <Stack.Screen name="practice-walkthrough" options={{ headerShown: false }} />
               <Stack.Screen
                 name="accounting-lesson"
                 options={{
@@ -114,7 +108,6 @@ function RootLayoutNav() {
                   presentation: 'card'
                 }}
               />
-
               <Stack.Screen
                 name="profile"
                 options={{
@@ -223,10 +216,4 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-});
 

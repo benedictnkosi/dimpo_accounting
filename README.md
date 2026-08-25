@@ -159,7 +159,7 @@ android {
 ## Then build your AAB:
 change the  versionCode in /Users/mac1/Documents/cursor/examquiz/android/app/build.gradle
 defaultConfig {
-        applicationId 'com.dimpolanguages'
+        applicationId 'com.accountingtutor'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 201
@@ -282,3 +282,7 @@ android/app/google-services.json
           "current_key": "AIzaSyByCggGOKgD-STXUohFPRg6c1YRsT_C2jo"
         }
       ],
+
+
+# create aab
+cd android && ./gradlew bundleRelease

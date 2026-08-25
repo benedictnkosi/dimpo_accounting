@@ -31,9 +31,10 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="dimpolanguages"/>
-        <data android:scheme="com.dimpolanguages"/>
+        <data android:scheme="dimpoaccounting"/>
+        <data android:scheme="com.accountingtutor"/>
         <data android:scheme="exp+exam-quiz"/>
+        <data android:scheme="exp+dimpo-accounting"/>
       </intent-filter>
       <intent-filter android:autoVerify="true" data-generated="true">
         <action android:name="android.intent.action.VIEW"/>

@@ -1,26 +1,29 @@
 export default {
-  name: 'Dimpo Languages',
+  name: 'Accounting CPA QUIZ',
+  // EAS project @nkosib/exam-quiz (slug cannot be changed on Expo).
   slug: 'exam-quiz',
-  version: '1',
+  version: '4',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
-  scheme: 'dimpolanguages',
-  userInterfaceStyle: 'automatic',
+  scheme: 'dimpoaccounting',
+  userInterfaceStyle: 'dark',
   newArchEnabled: false,
+  assetBundlePatterns: ['**/*'],
   ios: {
     supportsTablet: true,
-    bundleIdentifier: 'com.dimpolanguages',
-    buildNumber: '1.0.2',
+    bundleIdentifier: 'com.dimpoaccounting',
+    buildNumber: '4',
+    usesAppleSignIn: true,
     googleServicesFile: './GoogleService-Info.plist',
     infoPlist: {
       "ITSAppUsesNonExemptEncryption": false,
       "UIBackgroundModes": ["remote-notification"]
     },
     "associatedDomains": ["applinks:examquiz.co.za"],
-    "storeKitConfiguration": "./ios/DimpoLanguages/Configuration.storekit"
+    "storeKitConfiguration": "./ios/DimpoAccounting/Configuration.storekit"
   },
   android: {
-    package: 'com.dimpolanguages',
+    package: 'com.accountingtutor',
     "intentFilters": [
       {
         "action": "VIEW",
@@ -35,7 +38,7 @@ export default {
         "category": ["BROWSABLE", "DEFAULT"]
       }
     ],
-    versionCode: 2,
+    versionCode: 3,
     adaptiveIcon: {
       foregroundImage: './assets/images/adaptive-icon.png',
       backgroundColor: '#ffffff',
@@ -49,15 +52,22 @@ export default {
   },
   plugins: [
     'expo-router',
-    '@react-native-google-signin/google-signin',
-    'expo-sqlite',
+    'expo-apple-authentication',
+    [
+      '@react-native-google-signin/google-signin',
+      {
+        iosUrlScheme:
+          'com.googleusercontent.apps.53521587720-ur7dsvk6on4vaile0pr0litvpkhai6qj',
+      },
+    ],
     [
       'expo-build-properties',
       {
         android: {
-          compileSdkVersion: 35,
-          targetSdkVersion: 35,
-          buildToolsVersion: "34.0.0",
+          compileSdkVersion: 36,
+          targetSdkVersion: 36,
+          buildToolsVersion: "36.0.0",
+          kotlinVersion: "2.0.21",
           enableWebP: true
         },
         ios: {
@@ -71,7 +81,7 @@ export default {
         image: './assets/images/splash-icon.png',
         imageWidth: 200,
         resizeMode: 'contain',
-        backgroundColor: '#ffffff'
+        backgroundColor: '#0B1220'
       }
     ],
     [
@@ -80,7 +90,15 @@ export default {
         color: '#ffffff'
       }
     ],
-    "expo-asset"
+    [
+      'expo-asset',
+      {
+        assets: [
+          './assets/audio/correct.mp3',
+          './assets/audio/wrong.mp3',
+        ],
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true
@@ -92,7 +110,15 @@ export default {
     eas: {
       projectId: 'b4f9ab87-947e-4014-8990-0c11fa29cb2c'
     },
-    googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || "AIzaSyCaJHGdAh4f7BRJxNDRNkJ_vrrG74Ur_jA"
+    googlePlacesApiKey: process.env.GOOGLE_PLACES_API_KEY || "AIzaSyCaJHGdAh4f7BRJxNDRNkJ_vrrG74Ur_jA",
+    firebaseApiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+    firebaseAuthDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    firebaseProjectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+    firebaseStorageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    firebaseMessagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    firebaseAppId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
+    firebaseMeasurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || process.env.EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID,
+    siteUrl: process.env.NEXT_PUBLIC_SITE_URL || process.env.EXPO_PUBLIC_SITE_URL || 'https://matricunlocked.co.za',
   },
   owner: 'nkosib',
   runtimeVersion: '1.0.0',

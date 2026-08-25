@@ -1,0 +1,32 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public curriculum metadata — loaded before sign-in on the dashboard.
+    match /topics/{topicId} {
+      allow read: if true;
+    }
+
+    // Quiz content — public read; anyone can flag bad questions (deactivate only).
+    match /questions/{questionId} {
+      allow read: if true;
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'ready'])
+        && request.resource.data.active == false
+        && request.resource.data.ready == false;
+    }
+
+    // Dimpo Accounting curriculum — public read for lessons.
+    match /accounting_topics/{topicId} {
+      allow read: if true;
+    }
+
+    match /accounting/{questionId} {
+      allow read: if true;
+    }
+
+    // Per-user profile and premium flag.
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

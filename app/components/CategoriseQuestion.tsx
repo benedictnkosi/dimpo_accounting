@@ -1,27 +1,22 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Pressable, ViewStyle } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, StyleSheet, Pressable, Animated, ViewStyle } from 'react-native';
 import { ThemedText } from './ThemedText';
-import { useTheme } from '@/contexts/ThemeContext';
-import { useSound } from '../contexts/SoundContext';
-import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons, MaterialIcons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
+import { brand } from '@/constants/matric';
+import { Ionicons } from '@expo/vector-icons';
 
-// Assign a color to each category for visual feedback
 const CATEGORY_COLORS = [
-  '#6366F1', // Indigo
-  '#22D3EE', // Cyan
-  '#F59E42', // Orange
-  '#10B981', // Green
-  '#F43F5E', // Pink
-  '#A21CAF', // Purple
-  '#FBBF24', // Yellow
-  '#3B82F6', // Blue
+  '#6366F1', // Indigo / purple — first category (e.g. Adjusting Entry)
+  '#22D3EE', // Cyan — second category (e.g. Non-adjusting Entry)
+  '#F59E42',
+  '#10B981',
+  '#F43F5E',
+  '#A21CAF',
+  '#FBBF24',
+  '#3B82F6',
 ];
 
-// Distinct color for item selection
-const SELECTION_COLOR = '#D1D5DB'; // Soft grey for selection
+const CORRECT_DELAY_MS = 800;
+const MIN_TOUCH_SIZE = 56;
 
 interface CategoriseQuestionProps {
   id: string;
@@ -30,9 +25,9 @@ interface CategoriseQuestionProps {
   items: Record<string, string>; // item -> correct category
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
-// Utility function to shuffle an array
 function shuffleArray<T>(array: T[]): T[] {
   const arr = [...array];
   for (let i = arr.length - 1; i > 0; i--) {
@@ -42,6 +37,8 @@ function shuffleArray<T>(array: T[]): T[] {
   return arr;
 }
 
+type Phase = 'list' | 'choose' | 'feedback';
+
 export function CategoriseQuestion({
   id,
   prompt,
@@ -49,510 +46,598 @@ export function CategoriseQuestion({
   items,
   onContinue,
   setIsQuestionAnswered,
+  onAttempt,
 }: CategoriseQuestionProps) {
-  const { colors } = useTheme();
-  const { soundEnabled } = useSound();
-  const [assignments, setAssignments] = useState<Record<string, string | null>>({});
-  const [selectedItem, setSelectedItem] = useState<string | null>(null);
-  const [isAnswered, setIsAnswered] = useState(false);
-  const [feedback, setFeedback] = useState<Record<string, boolean>>({});
-  const [shuffledItemKeys, setShuffledItemKeys] = useState<string[]>([]);
-
-  // Log props on component mount
-  useEffect(() => {
-    console.log('🔍 CategoriseQuestion mounted with props:', {
-      id,
-      prompt,
-      categories,
-      items,
-      categoriesCount: categories?.length,
-      itemsCount: items ? Object.keys(items).length : 0,
-      itemsKeys: items ? Object.keys(items) : [],
-      itemsValues: items ? Object.values(items) : []
+  const [shuffledItemKeys, setShuffledItemKeys] = useState<string[]>(() =>
+    shuffleArray(Object.keys(items))
+  );
+  const [assignments, setAssignments] = useState<Record<string, string | null>>(() => {
+    const initial: Record<string, string | null> = {};
+    Object.keys(items).forEach((item) => {
+      initial[item] = null;
     });
-  }, [id, prompt, categories, items]);
+    return initial;
+  });
+  const [currentItem, setCurrentItem] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>('list');
+  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
+  const [inputLocked, setInputLocked] = useState(false);
 
-  // Assign a color to each category
+  const lockedRef = useRef(false);
+  const mountedRef = useRef(true);
+  const phaseRef = useRef<Phase>('list');
+  const currentItemRef = useRef<string | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingAssignmentsRef = useRef<Record<string, string | null> | null>(null);
+  const contentOpacity = useRef(new Animated.Value(1)).current;
+  const contentTranslate = useRef(new Animated.Value(0)).current;
+  const feedbackOpacity = useRef(new Animated.Value(0)).current;
+
+  phaseRef.current = phase;
+  currentItemRef.current = currentItem;
+
   const categoryColorMap = Object.fromEntries(
     categories.map((cat, idx) => [cat, CATEGORY_COLORS[idx % CATEGORY_COLORS.length]])
   );
 
-  // Log category color mapping
-  useEffect(() => {
-    console.log('🎨 Category color mapping:', categoryColorMap);
-  }, [categoryColorMap]);
+  const remainingItems = shuffledItemKeys.filter((item) => assignments[item] == null);
+  const answeredCount = shuffledItemKeys.filter((item) => assignments[item] != null).length;
+  const totalCount = shuffledItemKeys.length;
+  const itemNumber = currentItem
+    ? phase === 'feedback'
+      ? answeredCount
+      : answeredCount + 1
+    : 1;
 
-  // Shuffle items on mount or when question changes
-  useEffect(() => {
-    setShuffledItemKeys(shuffleArray(Object.keys(items)));
-  }, [id, items]);
+  const clearAdvanceTimeout = useCallback(() => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, []);
 
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    console.log('🔊 Playing feedback sound:', type, 'Sound enabled:', soundEnabled);
-    if (!soundEnabled) return;
-    try {
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-        }
+  const animateIn = useCallback(() => {
+    contentOpacity.setValue(0);
+    contentTranslate.setValue(14);
+    Animated.parallel([
+      Animated.timing(contentOpacity, {
+        toValue: 1,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+      Animated.timing(contentTranslate, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [contentOpacity, contentTranslate]);
+
+  const animateOut = useCallback(
+    (onDone: () => void) => {
+      Animated.parallel([
+        Animated.timing(contentOpacity, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentTranslate, {
+          toValue: -10,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        onDone();
       });
-    } catch (e) {
-      console.error('❌ Error playing sound:', e);
-    }
-  };
-
-  // Play wrong sound (keeping for backward compatibility)
-  const playWrongSound = async () => {
-    await playFeedbackSound('wrong');
-  };
-
-  useEffect(() => {
-    console.log('🔄 Initializing CategoriseQuestion state for id:', id);
-    const initial: Record<string, string | null> = {};
-    Object.keys(items).forEach(item => {
-      initial[item] = null;
-    });
-    console.log('📝 Initial assignments:', initial);
-    console.log('📝 About to call setAssignments with:', initial);
-    setAssignments(initial);
-    setSelectedItem(null);
-    setIsAnswered(false);
-    setFeedback({});
-    setIsQuestionAnswered(false);
-    
-    return () => {
-      console.log('🧹 CategoriseQuestion cleanup for id:', id);
-    };
-  }, [id]);
-
-  // Check if all items are assigned
-  useEffect(() => {
-    const allAssigned = Object.values(assignments).every(val => val !== null);
-    setIsQuestionAnswered(allAssigned);
-    if (allAssigned && !isAnswered) {
-      // Auto-check answers
-      const newFeedback: Record<string, boolean> = {};
-      Object.entries(assignments).forEach(([item, cat]) => {
-        newFeedback[item] = cat === items[item];
-      });
-      setFeedback(newFeedback);
-      setIsAnswered(true);
-      // Play sound based on overall performance
-      const allCorrect = Object.values(newFeedback).every(correct => correct);
-      playFeedbackSound(allCorrect ? 'correct' : 'wrong');
-    }
-    if (!allAssigned && isAnswered) {
-      setIsAnswered(false);
-    }
-  }, [assignments, setIsQuestionAnswered, isAnswered, items, playFeedbackSound]);
-
-  // Handle continue (reset)
-  const handleContinue = () => {
-    console.log('➡️ Continuing to next question');
-    const initial: Record<string, string | null> = {};
-    Object.keys(items).forEach(item => {
-      initial[item] = null;
-    });
-    setAssignments(initial);
-    setSelectedItem(null);
-    setIsAnswered(false);
-    setFeedback({});
-    setIsQuestionAnswered(false);
-    onContinue?.();
-  };
-
-  // Tap item to select for assignment
-  const handleItemTap = (item: string) => {
-    console.log('👆 Item tapped:', item, 'Is answered:', isAnswered);
-    if (isAnswered) return;
-    setSelectedItem(item);
-  };
-
-  // Tap category to assign selected item (restrict to correct category)
-  const handleCategoryTap = async (category: string) => {
-    console.log('🎯 Category tapped:', category, 'Selected item:', selectedItem, 'Is answered:', isAnswered);
-    if (!selectedItem || isAnswered) {
-      console.log('❌ Cannot assign - no selected item or already answered');
-      return;
-    }
-    if (items[selectedItem] !== category) {
-      console.log('❌ Wrong category! Expected:', items[selectedItem], 'Got:', category);
-      await playFeedbackSound('wrong');
-      setSelectedItem(null);
-      return;
-    }
-    console.log('✅ Correct assignment!', selectedItem, '->', category);
-    // Play correct sound for successful assignment
-    await playFeedbackSound('correct');
-    setAssignments(prev => ({ ...prev, [selectedItem]: category }));
-    setSelectedItem(null);
-  };
-
-  // Helper: get color dot for category
-  const getCategoryDot = (category: string) => (
-    <View style={{
-      width: 10, height: 10, borderRadius: 5, marginRight: 8,
-      backgroundColor: categoryColorMap[category],
-    }} />
+    },
+    [contentOpacity, contentTranslate]
   );
 
-  // Helper: get matched items for a category
-  const getMatchedItems = (category: string) =>
-    shuffledItemKeys.filter(item => assignments[item] === category);
+  const resetQuestion = useCallback(() => {
+    clearAdvanceTimeout();
+    lockedRef.current = false;
+    const keys = shuffleArray(Object.keys(items));
+    const initial: Record<string, string | null> = {};
+    keys.forEach((item) => {
+      initial[item] = null;
+    });
+    setShuffledItemKeys(keys);
+    setAssignments(initial);
+    setCurrentItem(null);
+    setSelectedCategory(null);
+    setPhase('list');
+    setIsCorrect(null);
+    setInputLocked(false);
+    setIsQuestionAnswered(false);
+    pendingAssignmentsRef.current = null;
+    contentOpacity.setValue(1);
+    contentTranslate.setValue(0);
+    feedbackOpacity.setValue(0);
+  }, [clearAdvanceTimeout, contentOpacity, contentTranslate, feedbackOpacity, items, setIsQuestionAnswered]);
 
-  // Helper: get item card style
-  const getItemCardStyle = (item: string): ViewStyle => {
-    const assignedCategory = assignments[item];
-    const isSelected = selectedItem === item;
-    const isCorrect = isAnswered && assignedCategory === items[item];
-    let backgroundColor = '#fff';
-    let borderColor = '#E5E7EB';
-    if (isCorrect && assignedCategory) backgroundColor = '#ECFDF5'; // green-50
-    if (isSelected) {
-      borderColor = '#3B82F6'; // blue-500
-      backgroundColor = '#F0F9FF'; // blue-50
+  const questionIdRef = useRef(id);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    if (questionIdRef.current !== id) {
+      questionIdRef.current = id;
+      resetQuestion();
     }
+    return () => {
+      mountedRef.current = false;
+      clearAdvanceTimeout();
+    };
+    // Reset only when the question identity changes — items come from the same question payload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const enterChoose = useCallback(
+    (item: string) => {
+      lockedRef.current = false;
+      currentItemRef.current = item;
+      phaseRef.current = 'choose';
+      setInputLocked(false);
+      setCurrentItem(item);
+      setSelectedCategory(null);
+      setIsCorrect(null);
+      setPhase('choose');
+      feedbackOpacity.setValue(0);
+      animateIn();
+    },
+    [animateIn, feedbackOpacity]
+  );
+
+  const handleItemTap = (item: string) => {
+    if (lockedRef.current || phaseRef.current !== 'list') return;
+    enterChoose(item);
+  };
+
+  const presentNextItem = useCallback(
+    (nextAssignments: Record<string, string | null>) => {
+      if (!mountedRef.current) return;
+      const nextItem = shuffledItemKeys.find((item) => nextAssignments[item] == null);
+      if (!nextItem) {
+        lockedRef.current = true;
+        setInputLocked(true);
+        setIsQuestionAnswered(true);
+        onContinue?.();
+        return;
+      }
+      enterChoose(nextItem);
+    },
+    [enterChoose, onContinue, setIsQuestionAnswered, shuffledItemKeys]
+  );
+
+  const advanceFromFeedback = useCallback(() => {
+    const nextAssignments = pendingAssignmentsRef.current;
+    if (!nextAssignments) return;
+    pendingAssignmentsRef.current = null;
+    clearAdvanceTimeout();
+    animateOut(() => {
+      if (!mountedRef.current) return;
+      presentNextItem(nextAssignments);
+    });
+  }, [animateOut, clearAdvanceTimeout, presentNextItem]);
+
+  const handleNext = () => {
+    if (phaseRef.current !== 'feedback') return;
+    advanceFromFeedback();
+  };
+
+  const handleCategoryTap = (category: string) => {
+    const item = currentItemRef.current;
+    if (lockedRef.current || phaseRef.current !== 'choose' || !item) return;
+
+    lockedRef.current = true;
+    setInputLocked(true);
+    const correct = items[item] === category;
+    onAttempt?.(item, correct);
+    const nextAssignments = { ...assignments, [item]: category };
+    pendingAssignmentsRef.current = nextAssignments;
+
+    setSelectedCategory(category);
+    setAssignments(nextAssignments);
+    setIsCorrect(correct);
+    setPhase('feedback');
+
+    feedbackOpacity.setValue(0);
+    Animated.timing(feedbackOpacity, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: true,
+    }).start();
+
+    if (!correct) return;
+
+    clearAdvanceTimeout();
+    timeoutRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
+      advanceFromFeedback();
+    }, CORRECT_DELAY_MS);
+  };
+
+  const getCategoryButtonStyle = (category: string): ViewStyle => {
+    const color = categoryColorMap[category];
+    const isSelected = selectedCategory === category;
+    const showingFeedback = phase === 'feedback';
+    const isTheCorrectCategory = currentItem != null && items[currentItem] === category;
+    const selectedWrong = showingFeedback && isSelected && !isTheCorrectCategory;
+
+    let borderColor = brand.border;
+    let backgroundColor = brand.cardElevated;
+    let borderWidth = 2;
+
+    if (!showingFeedback && isSelected) {
+      borderColor = color;
+      backgroundColor = `${color}22`;
+    }
+
+    if (showingFeedback && isTheCorrectCategory) {
+      borderColor = brand.emerald;
+      backgroundColor = brand.bullseyeBg;
+      borderWidth = 2;
+    }
+
+    if (selectedWrong) {
+      borderColor = brand.rose;
+      backgroundColor = brand.oopsieBg;
+      borderWidth = 2;
+    }
+
     return {
-      backgroundColor,
       borderColor,
-      borderWidth: 2,
-      borderRadius: 12,
-      paddingVertical: 16,
-      paddingHorizontal: 18,
-      marginBottom: 12,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-      shadowColor: '#000',
-      shadowOpacity: 0.04,
-      shadowRadius: 4,
-      shadowOffset: { width: 0, height: 2 },
-      elevation: 2,
+      backgroundColor,
+      borderWidth,
     };
   };
 
-  // Helper: get checkmark and label for correct item
-  const getItemStatus = (item: string) => {
-    const assignedCategory = assignments[item];
-    const isCorrect = isAnswered && assignedCategory === items[item];
-    if (isCorrect && assignedCategory) {
-      return (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-          <MaterialIcons name="check-circle" size={18} color="#22C55E" />
-          <View style={{
-            backgroundColor: '#D1FAE5',
-            borderRadius: 8,
-            paddingHorizontal: 8,
-            paddingVertical: 2,
-            marginLeft: 4,
-          }}>
-            <ThemedText style={{ color: categoryColorMap[assignedCategory], fontWeight: '700', fontSize: 13 }}>{assignedCategory}</ThemedText>
-          </View>
-        </View>
-      );
+  const renderCategoryIcon = (category: string) => {
+    const showingFeedback = phase === 'feedback';
+    const isTheCorrectCategory = currentItem != null && items[currentItem] === category;
+    const isSelected = selectedCategory === category;
+
+    if (showingFeedback && isTheCorrectCategory) {
+      return <Ionicons name="checkmark-circle" size={22} color={brand.emerald} />;
     }
-    return null;
+    if (showingFeedback && isSelected && !isTheCorrectCategory) {
+      return <Ionicons name="close-circle" size={22} color={brand.rose} />;
+    }
+    return (
+      <View
+        style={[styles.categoryDot, { backgroundColor: categoryColorMap[category] }]}
+      />
+    );
   };
 
-  // Helper: blue dot for selected item
-  const getSelectedDot = (item: string) => {
-    if (selectedItem === item) {
-      return <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#3B82F6', marginLeft: 8 }} />;
-    }
-    return null;
-  };
-
-  // Log current state for debugging
-  useEffect(() => {
-    console.log('📊 CategoriseQuestion current state:', {
-      selectedItem,
-      isAnswered,
-      assignments,
-      feedback
-    });
-  }, [selectedItem, isAnswered, assignments, feedback]);
-
-  // Track assignments state changes specifically
-  useEffect(() => {
-    console.log('🔄 Assignments state changed to:', assignments);
-    console.log('🔄 Assignments keys:', Object.keys(assignments));
-    console.log('🔄 Assignments values:', Object.values(assignments));
-  }, [assignments]);
-
-  return (
-    <View style={{ flex: 1, padding: 16, backgroundColor: '#F6F8FA' }}>
-      <View style={{ backgroundColor: '#F1F5F9', borderRadius: 18, padding: 18, marginBottom: 18 }}>
-        <ThemedText style={{ fontSize: 18, fontWeight: '700', marginBottom: 2 }}>Items to Classify <ThemedText style={{ fontSize: 16 }}>→</ThemedText></ThemedText>
+  const renderList = () => (
+    <View>
+      <View style={styles.sectionHeader}>
+        <ThemedText style={styles.sectionTitle}>Items to Classify</ThemedText>
+        {!!prompt && <ThemedText style={styles.promptText}>{prompt}</ThemedText>}
       </View>
-      <View style={{ marginBottom: 18 }}>
-        {shuffledItemKeys.filter(item => !assignments[item]).map(item => (
-          <Pressable
-            key={item}
-            style={getItemCardStyle(item)}
-            onPress={() => handleItemTap(item)}
-            disabled={isAnswered}
-          >
-            <ThemedText style={{ fontSize: 16, fontWeight: '600', color: '#222', flex: 1 }}>{item}</ThemedText>
-            {getItemStatus(item)}
-            {getSelectedDot(item)}
-          </Pressable>
-        ))}
-      </View>
-      <View style={{ marginTop: 12 }}>
-        <ThemedText style={{ fontSize: 17, fontWeight: '700', marginBottom: 8 }}>Categories</ThemedText>
-        {categories.map(category => (
-          <Pressable
-            key={category}
-            onPress={() => handleCategoryTap(category)}
-            disabled={!selectedItem || isAnswered}
-            style={({ pressed }) => [{
-              borderWidth: 2,
-              borderColor: '#CBD5E1',
-              borderRadius: 16,
-              padding: 16,
-              marginBottom: 20,
-              backgroundColor: pressed && selectedItem && !isAnswered ? '#F1F5F9' : '#F8FAFC',
-              borderStyle: 'dashed',
-              opacity: !selectedItem || isAnswered ? 0.6 : 1,
-            }]}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10, justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                {getCategoryDot(category)}
-                <ThemedText style={{ fontWeight: '700', fontSize: 16, color: categoryColorMap[category], marginRight: 6 }}>{category}</ThemedText>
-              </View>
-              <View style={{
-                minWidth: 24,
-                paddingHorizontal: 7,
-                paddingVertical: 2,
-                borderRadius: 12,
-                backgroundColor: '#E0E7EF',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}>
-                <ThemedText style={{ color: '#334155', fontWeight: '700', fontSize: 13 }}>{getMatchedItems(category).length}</ThemedText>
-              </View>
-            </View>
-            {getMatchedItems(category).length > 0 && (
-              <View style={{ marginTop: 2 }}>
-                {getMatchedItems(category).map(item => (
-                  <View key={item} style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: '#F1F5F9',
-                    borderRadius: 8,
-                    paddingVertical: 6,
-                    paddingHorizontal: 10,
-                    marginBottom: 6,
-                  }}>
-                    <MaterialIcons name="check-circle" size={16} color="#22C55E" style={{ marginRight: 6 }} />
-                    <ThemedText style={{ fontSize: 14, color: '#222', fontWeight: '500' }}>{item}</ThemedText>
-                  </View>
-                ))}
-              </View>
-            )}
-            {getMatchedItems(category).length === 0 && (
-              <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-                <ThemedText style={{ color: '#94A3B8', fontSize: 15, fontWeight: '500' }}>
-                  Tap to assign here
+      {remainingItems.map((item) => (
+        <Pressable
+          key={item}
+          style={({ pressed }) => [
+            styles.itemCard,
+            pressed && styles.pressed,
+          ]}
+          onPress={() => handleItemTap(item)}
+          accessibilityRole="button"
+          accessibilityLabel={`Categorise ${item}`}
+          accessibilityHint="Opens category choices for this item"
+        >
+          <ThemedText style={styles.itemText}>{item}</ThemedText>
+          <Ionicons name="chevron-forward" size={18} color={brand.textMuted} />
+        </Pressable>
+      ))}
+    </View>
+  );
+
+  const renderChoose = () => {
+    if (!currentItem) return null;
+    const correctCategory = items[currentItem];
+    const showingFeedback = phase === 'feedback';
+    const locked = showingFeedback || inputLocked;
+
+    return (
+      <View>
+        <Animated.View
+          key={currentItem}
+          style={{
+            opacity: contentOpacity,
+            transform: [{ translateY: contentTranslate }],
+          }}
+          pointerEvents="box-none"
+        >
+          {totalCount > 1 && (
+            <ThemedText style={styles.itemProgress}>
+              Item {itemNumber} of {totalCount}
+            </ThemedText>
+          )}
+
+          {showingFeedback && isCorrect !== null && (
+            <Animated.View
+              style={[
+                styles.feedbackBanner,
+                isCorrect ? styles.feedbackCorrect : styles.feedbackIncorrect,
+                { opacity: feedbackOpacity },
+              ]}
+              accessibilityLiveRegion="polite"
+            >
+              <Ionicons
+                name={isCorrect ? 'checkmark-circle' : 'close-circle'}
+                size={22}
+                color={isCorrect ? brand.emerald : brand.rose}
+              />
+              <ThemedText
+                style={[
+                  styles.feedbackTitle,
+                  { color: isCorrect ? brand.emerald : brand.rose },
+                ]}
+              >
+                {isCorrect ? 'Correct!' : 'Incorrect'}
+              </ThemedText>
+            </Animated.View>
+          )}
+
+          <View style={styles.itemFocusCard}>
+            <ThemedText style={styles.itemFocusText}>{currentItem}</ThemedText>
+            {showingFeedback && correctCategory ? (
+              <View style={styles.resultRow}>
+                <ThemedText style={styles.resultArrow}>→</ThemedText>
+                <ThemedText
+                  style={[
+                    styles.resultCategory,
+                    { color: categoryColorMap[correctCategory] },
+                  ]}
+                >
+                  {correctCategory}
                 </ThemedText>
               </View>
-            )}
-          </Pressable>
-        ))}
-      </View>
-      {isAnswered && Object.values(assignments).every(val => val !== null) && (
-        <Pressable
-          onPress={handleContinue}
-          accessibilityRole="button"
-          accessibilityLabel="Continue to next question"
-          style={{ width: '100%', marginTop: 18 }}
-        >
-          <LinearGradient
-            colors={[colors.primary, '#22c55e']}
-            style={styles.continueButton}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
+            ) : null}
+          </View>
+
+          {!showingFeedback && (
+            <ThemedText style={styles.chooseLabel}>Choose the correct category:</ThemedText>
+          )}
+        </Animated.View>
+
+        <View style={styles.categoryList}>
+          {categories.map((category) => {
+            const showingFeedbackState = phase === 'feedback';
+            const isTheCorrectCategory = items[currentItem] === category;
+            const isSelected = selectedCategory === category;
+            const selectedWrong = showingFeedbackState && isSelected && !isTheCorrectCategory;
+            const labelColor = showingFeedbackState
+              ? isTheCorrectCategory
+                ? brand.emerald
+                : selectedWrong
+                  ? brand.rose
+                  : brand.textSecondary
+              : categoryColorMap[category];
+
+            return (
+              <Pressable
+                key={`${currentItem}-${category}`}
+                onPress={() => handleCategoryTap(category)}
+                disabled={locked}
+                accessibilityRole="button"
+                accessibilityLabel={category}
+                accessibilityState={{ disabled: locked, selected: isSelected }}
+                accessibilityHint={
+                  showingFeedbackState
+                    ? isTheCorrectCategory
+                      ? 'Correct category'
+                      : 'Incorrect category'
+                    : `Assign ${currentItem} to ${category}`
+                }
+                style={({ pressed }) => [
+                  styles.categoryButton,
+                  getCategoryButtonStyle(category),
+                  pressed && !locked && styles.pressed,
+                ]}
+              >
+                <View style={styles.categoryButtonInner}>
+                  {renderCategoryIcon(category)}
+                  <ThemedText style={[styles.categoryButtonText, { color: labelColor }]}>
+                    {category}
+                  </ThemedText>
+                </View>
+                {showingFeedbackState && isTheCorrectCategory && !isCorrect && (
+                  <ThemedText style={styles.correctHint}>Correct category</ThemedText>
+                )}
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {showingFeedback && isCorrect === false && (
+          <Pressable
+            onPress={handleNext}
+            accessibilityRole="button"
+            accessibilityLabel="Next"
+            style={({ pressed }) => [styles.nextButton, pressed && styles.pressed]}
           >
-            <ThemedText style={styles.continueButtonText}>Continue 🚀</ThemedText>
-          </LinearGradient>
-        </Pressable>
-      )}
+            <ThemedText style={styles.nextButtonText}>Next</ThemedText>
+            <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+          </Pressable>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <View style={styles.container}>
+      {phase === 'list' ? renderList() : renderChoose()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  outerContainer: {
+  container: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#F6F8FA',
+    padding: 4,
+    backgroundColor: 'transparent',
   },
-  card: {
-    width: '100%',
-    maxWidth: 480,
-    borderRadius: 32,
-    padding: 16 ,
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 12,
-    backgroundColor: '#fff',
-    marginVertical: 24,
-    alignItems: 'center',
-    
+  sectionHeader: {
+    backgroundColor: brand.cardElevated,
+    borderRadius: 18,
+    padding: 18,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: brand.border,
   },
-  prompt: {
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 28,
-    marginBottom: 8,
-    letterSpacing: 0.1,
-  },
-  instructions: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  instructionsText: {
-    fontSize: 14,
-    color: '#64748B',
-    fontStyle: 'italic',
-  },
-  matchingRow: {
-    flexDirection: 'row',
-    width: '100%',
-    marginTop: 12,
-    alignItems: 'stretch',
-    justifyContent: 'center',
-    height: 360,
-    minHeight: 220,
-    gap: 12,
-  },
-  itemsColumn: {
-    flex: 1,
-    alignItems: 'stretch',
-    minWidth: 120,
-    maxWidth: 180,
-    height: '100%',
-    paddingBottom: 0,
-  },
-  categoriesColumn: {
-    flex: 1,
-    alignItems: 'stretch',
-    minWidth: 120,
-    maxWidth: 180,
-    height: '100%',
-  },
-  columnTitle: {
-    fontSize: 16,
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: '700',
-    marginBottom: 8,
-    color: '#374151',
-    textAlign: 'center',
-    textTransform: 'uppercase',
+    color: brand.text,
   },
-  itemButton: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  promptText: {
+    fontSize: 14,
+    color: brand.textSecondary,
+    marginTop: 6,
+    lineHeight: 20,
+  },
+  itemCard: {
+    backgroundColor: brand.cardElevated,
+    borderColor: brand.border,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: MIN_TOUCH_SIZE,
     shadowColor: '#000',
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 8,
-    elevation: 4,
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    flex: 1,
-    marginBottom: 0,
-    marginTop: 0,
-  },
-  itemPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.97 }],
-  },
-  itemContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    width: '100%',
+    elevation: 2,
   },
   itemText: {
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'left',
+    fontSize: 16,
+    fontWeight: '600',
+    color: brand.text,
     flex: 1,
+    marginRight: 8,
   },
-  categoryBox: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 18,
-    borderWidth: 2,
-    borderColor: '#E5E7EB',
+  feedbackBanner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 60,
-    justifyContent: 'center',
-    flex: 1,
-    marginVertical: 0,
+    gap: 8,
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginBottom: 14,
   },
-  categoryHeader: {
+  feedbackCorrect: {
+    backgroundColor: brand.bullseyeBg,
+  },
+  feedbackIncorrect: {
+    backgroundColor: brand.oopsieBg,
+  },
+  feedbackTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  itemFocusCard: {
+    backgroundColor: brand.cardElevated,
+    borderRadius: 16,
+    paddingVertical: 20,
+    paddingHorizontal: 18,
+    borderWidth: 1,
+    borderColor: brand.border,
+    marginBottom: 16,
+  },
+  itemFocusText: {
+    fontSize: 22,
+    fontWeight: '800',
+    color: brand.text,
+    letterSpacing: -0.3,
+  },
+  resultRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 0,
-    paddingVertical: 8,
-    borderRadius: 12,
-    width: '100%',
+    marginTop: 10,
+    gap: 8,
   },
-  categoryTitle: {
-    fontSize: 15,
+  resultArrow: {
+    fontSize: 16,
     fontWeight: '700',
-    letterSpacing: 0.2,
+    color: brand.textSecondary,
+  },
+  resultCategory: {
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  chooseLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: brand.text,
+    marginBottom: 14,
+  },
+  itemProgress: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    color: brand.textMuted,
+    marginBottom: 12,
     textTransform: 'uppercase',
   },
-  continueButton: {
-    marginTop: 24,
+  categoryList: {
+    gap: 12,
+  },
+  categoryButton: {
     borderRadius: 16,
-    paddingVertical: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 18,
+    minHeight: 64,
+    justifyContent: 'center',
+  },
+  categoryButtonInner: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: '100%',
-    shadowColor: '#22C55E',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 12,
-    elevation: 8,
+    gap: 12,
   },
-  continueButtonText: {
-    color: '#fff',
-    fontWeight: '800',
-    fontSize: 18,
-    letterSpacing: 0.2,
-  },
-  motivation: {
-    marginTop: 18,
-    fontSize: 16,
-    color: '#22C55E',
+  categoryButtonText: {
+    fontSize: 17,
     fontWeight: '700',
-    textAlign: 'center',
+    flex: 1,
   },
-  categoryPressed: {
-    opacity: 0.85,
-    transform: [{ scale: 0.97 }],
+  categoryDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
   },
-  categoryBoxGap: {
-    marginBottom: 16, // Adjust as needed for spacing
+  correctHint: {
+    marginTop: 8,
+    marginLeft: 34,
+    fontSize: 13,
+    fontWeight: '600',
+    color: brand.emerald,
   },
-}); 
+  nextButton: {
+    marginTop: 18,
+    backgroundColor: brand.primary,
+    borderRadius: 16,
+    minHeight: 56,
+    paddingHorizontal: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  nextButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  pressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+});

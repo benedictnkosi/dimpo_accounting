@@ -3,10 +3,9 @@ import { StyleSheet, Pressable, View, ScrollView } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
+import { brand } from '@/constants/matric';
 import { useFeedback } from '../contexts/FeedbackContext';
-import { useSound } from '../contexts/SoundContext';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import CheckContinueButton from './CheckContinueButton';
 
@@ -17,6 +16,7 @@ interface DragToSortQuestionProps {
   correct_order: string[];
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
 interface SortableItem {
@@ -34,6 +34,7 @@ export function DragToSortQuestion({
   correct_order,
   onContinue,
   setIsQuestionAnswered,
+  onAttempt,
 }: DragToSortQuestionProps) {
   console.log('[DragToSortQuestion] items:', items);
   const [sortableItems, setSortableItems] = useState<SortableItem[]>([]);
@@ -42,44 +43,6 @@ export function DragToSortQuestion({
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const { colors, isDark } = useTheme();
   const { setFeedback, resetFeedback } = useFeedback();
-  const { soundEnabled } = useSound();
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    if (!soundEnabled) return;
-    
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundRef.current = soundObject;
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-          soundRef.current = null;
-        }
-      });
-    } catch (e) {
-      // fail silently
-    }
-  };
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   // Initialize items with shuffled order
   useEffect(() => {
@@ -100,9 +63,11 @@ export function DragToSortQuestion({
       .map(item => item.text);
     
     const isOrderCorrect = currentOrder.every((item, index) => item === correct_order[index]);
+    currentOrder.forEach((item, index) => {
+      onAttempt?.(item, item === correct_order[index]);
+    });
     
     if (isOrderCorrect) {
-      playFeedbackSound('correct');
       setIsCorrect(true);
       setIsAnswered(true);
       setIsQuestionAnswered(true);
@@ -114,7 +79,6 @@ export function DragToSortQuestion({
         questionId: id,
       });
     } else {
-      playFeedbackSound('wrong');
       setIsCorrect(false);
       setIsAnswered(true);
       setIsQuestionAnswered(true);
@@ -189,7 +153,7 @@ export function DragToSortQuestion({
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
       minHeight: 60,
-      backgroundColor: '#fff',
+      backgroundColor: brand.card,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.08,
@@ -259,7 +223,7 @@ export function DragToSortQuestion({
   return (
     <View style={styles.outerContainer}>
       <LinearGradient
-        colors={['#f0f9ff', '#e0e7ff']}
+        colors={[brand.card, brand.cardElevated]}
         style={styles.cardContainer}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -324,7 +288,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F6F8FA',
+    backgroundColor: 'transparent',
   },
   cardContainer: {
     width: '100%',
@@ -336,7 +300,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 12,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     marginVertical: 24,
     alignItems: 'center',
     marginBottom: 24,
@@ -375,7 +339,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#F3F4F6',
+    backgroundColor: brand.cardElevated,
     alignItems: 'center',
     justifyContent: 'center',
   },

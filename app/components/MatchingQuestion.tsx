@@ -3,10 +3,9 @@ import { StyleSheet, Pressable, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
+import { brand } from '@/constants/matric';
 import { useFeedback } from '../contexts/FeedbackContext';
-import { useSound } from '../contexts/SoundContext';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import CheckContinueButton from './CheckContinueButton';
 
@@ -16,6 +15,7 @@ interface MatchingQuestionProps {
   pairs: Record<string, string>;
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
 interface MatchCard {
@@ -46,6 +46,7 @@ export function MatchingQuestion({
   pairs,
   onContinue,
   setIsQuestionAnswered,
+  onAttempt,
 }: MatchingQuestionProps) {
   const [cards, setCards] = useState<MatchCard[]>([]);
   const [selectedCard, setSelectedCard] = useState<string | null>(null);
@@ -53,46 +54,6 @@ export function MatchingQuestion({
   const [allMatched, setAllMatched] = useState(false);
   const { colors, isDark } = useTheme();
   const { setFeedback, resetFeedback } = useFeedback();
-  const { soundEnabled } = useSound();
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    // Only play sound if sound is enabled
-    if (!soundEnabled) return;
-    
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundRef.current = soundObject;
-      // Unload after playback
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-          soundRef.current = null;
-        }
-      });
-    } catch (e) {
-      // fail silently
-    }
-  };
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   // Initialize cards with shuffled values
   useEffect(() => {
@@ -147,9 +108,8 @@ export function MatchingQuestion({
          (card.type === 'key' && firstCard.text === card.correctMatch));
 
       if (isValidMatch) {
-        // Valid match - play correct sound
-        playFeedbackSound('correct');
-        
+        const keyCard = firstCard.type === 'key' ? firstCard : card;
+        onAttempt?.(keyCard.text, true);
         setCards(prev => prev.map(c => {
           if (c.id === cardId || c.id === selectedCard) {
             return {
@@ -188,8 +148,8 @@ export function MatchingQuestion({
           });
         }
       } else {
-        // Invalid match - play wrong sound and deselect first card
-        playFeedbackSound('wrong');
+        const keyCard = firstCard.type === 'key' ? firstCard : card.type === 'key' ? card : firstCard;
+        onAttempt?.(keyCard.text, false);
         setCards(prev => prev.map(c => ({ ...c, isSelected: false })));
       }
       
@@ -263,7 +223,7 @@ export function MatchingQuestion({
       justifyContent: 'center' as const,
       minHeight: 80,
       height: 80,
-      backgroundColor: '#fff',
+      backgroundColor: brand.card,
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.08,
@@ -325,7 +285,7 @@ export function MatchingQuestion({
   return (
     <View style={styles.outerContainer}>
       <LinearGradient
-        colors={['#f0f9ff', '#e0e7ff']}
+        colors={[brand.card, brand.cardElevated]}
         style={styles.cardContainer}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -399,7 +359,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F6F8FA',
+    backgroundColor: 'transparent',
   },
   cardContainer: {
     width: '100%',
@@ -411,7 +371,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 12,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     marginVertical: 24,
     alignItems: 'center',
   },
@@ -457,6 +417,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
-    color: '#22223B',
+    color: brand.text,
   },
 }); 

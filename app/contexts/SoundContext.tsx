@@ -5,18 +5,19 @@ interface SoundContextType {
     soundEnabled: boolean;
     toggleSound: () => void;
     setSoundEnabled: (enabled: boolean) => void;
+    playFeedbackSound: (type: 'correct' | 'wrong') => Promise<void>;
 }
 
 const SoundContext = createContext<SoundContextType>({
     soundEnabled: true,
     toggleSound: () => {},
     setSoundEnabled: () => {},
+    playFeedbackSound: async () => {},
 });
 
 export function SoundProvider({ children }: { children: React.ReactNode }) {
     const [soundEnabled, setSoundEnabledState] = useState(true);
 
-    // Load sound setting from AsyncStorage on mount
     useEffect(() => {
         loadSoundSetting();
     }, []);
@@ -45,8 +46,10 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
         setSoundEnabled(!soundEnabled);
     };
 
+    const playFeedbackSound = async () => {};
+
     return (
-        <SoundContext.Provider value={{ soundEnabled, toggleSound, setSoundEnabled }}>
+        <SoundContext.Provider value={{ soundEnabled, toggleSound, setSoundEnabled, playFeedbackSound }}>
             {children}
         </SoundContext.Provider>
     );

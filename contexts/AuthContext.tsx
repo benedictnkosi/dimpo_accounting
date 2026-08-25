@@ -1,39 +1,34 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/config/firebase';
-import { useRouter, useSegments } from 'expo-router';
+import { setAnalyticsUserId } from '@/services/analytics';
 
 export interface AuthUser {
   uid: string;
   email: string | null;
   displayName?: string | null;
   photoURL?: string | null;
-  isPremium?: boolean;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
   isLoading: boolean;
-  signIn: (email: string, password: string) => Promise<AuthUser>;
-  signUp: (email: string, password: string) => Promise<AuthUser>;
   signOut: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   isLoading: true,
-  signIn: async () => { throw new Error('AuthContext not initialized'); },
-  signUp: async () => { throw new Error('AuthContext not initialized'); },
   signOut: async () => { throw new Error('AuthContext not initialized'); },
+  refreshUser: async () => { throw new Error('AuthContext not initialized'); },
 });
 
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const segments = useSegments();
-  const router = useRouter();
 
   useEffect(() => {
     let isMounted = true;
@@ -65,13 +60,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Store in SecureStore as backup
         await SecureStore.setItemAsync('auth', JSON.stringify({ user: userData }));
         setUser(userData);
+        setAnalyticsUserId(firebaseUser.uid);
       } else {
-        // Only clear auth if we're sure there's no user
-        const storedAuth = await SecureStore.getItemAsync('auth');
-        if (!storedAuth) {
-          setUser(null);
-          await SecureStore.deleteItemAsync('auth');
-        }
+        setUser(null);
+        setAnalyticsUserId(null);
+        await SecureStore.deleteItemAsync('auth');
       }
       setIsLoading(false);
     });
@@ -84,24 +77,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (isLoading) return;
+  const persistUser = async (firebaseUser: NonNullable<typeof auth.currentUser>) => {
+    const userData: AuthUser = {
+      uid: firebaseUser.uid,
+      email: firebaseUser.email,
+      displayName: firebaseUser.displayName,
+      photoURL: firebaseUser.photoURL,
+    };
+    await SecureStore.setItemAsync('auth', JSON.stringify({ user: userData }));
+    setUser(userData);
+    setAnalyticsUserId(firebaseUser.uid);
+  };
 
-    const inAuthGroup = segments[0] === '(auth)';
-    const inLoginScreen = segments.join('/') === 'login';
-    const inRegisterScreen = segments.join('/') === 'register';
-    const inForgotPasswordScreen = segments.join('/') === 'forgot-password';
-    const inOnboardingScreen = segments.join('/') === 'onboarding';
-    const inTabsGroup = segments[0] === '(tabs)';
-
-    if (!user && !inLoginScreen && !inRegisterScreen && !inForgotPasswordScreen && !inOnboardingScreen) {
-      router.replace('/login');
-    } else if (user && (inAuthGroup || inLoginScreen || inRegisterScreen || inForgotPasswordScreen)) {
-      router.replace('/(tabs)');
-    } else if (!user && inTabsGroup) {
-      router.replace('/login');
-    }
-  }, [user, isLoading, segments]);
+  const refreshUser = async () => {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) return;
+    await firebaseUser.reload();
+    await persistUser(firebaseUser);
+  };
 
   const signOut = async () => {
     await firebaseSignOut(auth);
@@ -109,30 +102,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
-  const signIn = async (email: string, password: string): Promise<AuthUser> => {
-    const { user: firebaseUser } = await signInWithEmailAndPassword(auth, email, password);
-    const userData: AuthUser = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      photoURL: firebaseUser.photoURL,
-    };
-    return userData;
-  };
-
-  const signUp = async (email: string, password: string): Promise<AuthUser> => {
-    const { user: firebaseUser } = await createUserWithEmailAndPassword(auth, email, password);
-    const userData: AuthUser = {
-      uid: firebaseUser.uid,
-      email: firebaseUser.email,
-      displayName: firebaseUser.displayName,
-      photoURL: firebaseUser.photoURL,
-    };
-    return userData;
-  };
-
   return (
-    <AuthContext.Provider value={{ user, isLoading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, isLoading, signOut, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );
@@ -144,4 +115,4 @@ export function useAuth() {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+}

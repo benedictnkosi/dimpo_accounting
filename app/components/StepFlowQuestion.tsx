@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSound } from '../contexts/SoundContext';
+import { brand } from '@/constants/matric';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 
 interface StepFlowQuestionProps {
   id: string;
@@ -18,6 +17,7 @@ interface StepFlowQuestionProps {
   }[];
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
 export function StepFlowQuestion({
@@ -25,9 +25,9 @@ export function StepFlowQuestion({
   steps,
   onContinue,
   setIsQuestionAnswered,
+  onAttempt,
 }: StepFlowQuestionProps) {
   const { colors } = useTheme();
-  const { soundEnabled } = useSound();
   const [currentStep, setCurrentStep] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
@@ -37,45 +37,6 @@ export function StepFlowQuestion({
   const [stepAnswers, setStepAnswers] = useState<(string | null)[]>([]);
   const [stepFeedbacks, setStepFeedbacks] = useState<(string | null)[]>([]);
   const [shuffledOptions, setShuffledOptions] = useState<string[][]>([]);
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    // Only play sound if sound is enabled
-    if (!soundEnabled) return;
-    
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundRef.current = soundObject;
-      // Unload after playback
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-          soundRef.current = null;
-        }
-      });
-    } catch (e) {
-      // fail silently
-    }
-  };
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   useEffect(() => {
     setCurrentStep(0);
@@ -108,10 +69,7 @@ export function StepFlowQuestion({
     setSelected(value);
     setIsAnswered(true);
     const isCorrect = value === steps[currentStep].answer;
-    
-    // Play sound feedback
-    playFeedbackSound(isCorrect ? 'correct' : 'wrong');
-    
+    onAttempt?.(`step-${currentStep}`, isCorrect);
     const feedbackMsg = isCorrect ? 'Correct! 🎉' : `Incorrect. The answer is "${steps[currentStep].answer}"`;
     setFeedback(feedbackMsg);
     setStepResults(prev => {
@@ -176,10 +134,10 @@ export function StepFlowQuestion({
       ];
     }
     if (value === steps[currentStep].answer) {
-      return [styles.buttonText, { color: '#22223B', fontWeight: '700' as const }];
+      return [styles.buttonText, { color: brand.text, fontWeight: '700' as const }];
     }
     if (selected === value && value !== steps[currentStep].answer) {
-      return [styles.buttonText, { color: '#22223B', fontWeight: '700' as const }];
+      return [styles.buttonText, { color: brand.text, fontWeight: '700' as const }];
     }
     return [styles.buttonText, { color: colors.textSecondary }];
   };
@@ -201,7 +159,7 @@ export function StepFlowQuestion({
   return (
     <View style={styles.outerContainer}>
       <LinearGradient
-        colors={['#f0f9ff', '#e0e7ff']}
+        colors={[brand.card, brand.cardElevated]}
         style={styles.card}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -250,12 +208,23 @@ export function StepFlowQuestion({
             )}
           </View>
         )}
+        {isAnswered && currentStep === steps.length - 1 && (
+          <View style={styles.finishBanner}>
+            <ThemedText style={[styles.completion, { color: colors.success, marginTop: 0 }]}>
+              You finished this question!
+            </ThemedText>
+            <ThemedText style={styles.finishStatsText}>
+              {stepResults.filter(Boolean).length} correct ·{' '}
+              {stepResults.filter((value) => value === false).length} incorrect
+            </ThemedText>
+          </View>
+        )}
         {isAnswered && !completed && (
           <Pressable
             style={{ width: '100%' }}
             onPress={handleContinue}
             accessibilityRole="button"
-            accessibilityLabel={currentStep === steps.length - 1 ? "Continue" : "Next Step"}
+            accessibilityLabel={currentStep === steps.length - 1 ? "Next question" : "Next Step"}
           >
             <LinearGradient
               colors={[colors.primary, '#22c55e']}
@@ -264,7 +233,7 @@ export function StepFlowQuestion({
               end={{ x: 1, y: 0 }}
             >
               <ThemedText style={styles.nextButtonText}>
-                {currentStep === steps.length - 1 ? 'Continue' : 'Next Step'}
+                {currentStep === steps.length - 1 ? 'Next question' : 'Next Step'}
               </ThemedText>
             </LinearGradient>
           </Pressable>
@@ -283,7 +252,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F6F8FA',
+    backgroundColor: 'transparent',
   },
   card: {
     width: '100%',
@@ -295,7 +264,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 12,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     marginVertical: 24,
     alignItems: 'center',
   },
@@ -313,7 +282,7 @@ const styles = StyleSheet.create({
   progressBarBg: {
     width: '100%',
     height: 6,
-    backgroundColor: '#E5E7EB',
+    backgroundColor: brand.cardElevated,
     borderRadius: 3,
     marginTop: 4,
     marginBottom: 2,
@@ -328,7 +297,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
     marginBottom: 18,
-    color: '#22223B',
+    color: brand.text,
     textAlign: 'center',
     lineHeight: 28,
     letterSpacing: 0.1,
@@ -347,7 +316,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     minHeight: 60,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -361,7 +330,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.97 }],
   },
   correctButton: {
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     borderColor: '#22c55e',
     shadowColor: '#22C55E',
     shadowOffset: { width: 0, height: 4 },
@@ -370,7 +339,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   incorrectButton: {
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     borderColor: '#EF4444',
     shadowColor: '#EF4444',
     shadowOffset: { width: 0, height: 4 },
@@ -389,7 +358,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     flex: 1,
-    color: '#22223B',
+    color: brand.text,
   },
   feedbackContainer: {
     marginTop: 18,
@@ -438,5 +407,23 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 16,
     color: '#22C55E',
+  },
+  finishBanner: {
+    width: '100%',
+    marginTop: 12,
+    marginBottom: 4,
+    backgroundColor: 'rgba(34, 197, 94, 0.12)',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 197, 94, 0.28)',
+    padding: 14,
+    alignItems: 'center',
+  },
+  finishStatsText: {
+    marginTop: 6,
+    fontSize: 14,
+    fontWeight: '700',
+    color: brand.textSecondary,
+    textAlign: 'center',
   },
 }); 

@@ -19,6 +19,15 @@ export interface PurchasePackage extends PurchasesPackage {
     product: PurchasesStoreProduct;
 }
 
+export function hasPremiumEntitlement(customerInfo: CustomerInfo | null | undefined): boolean {
+    if (!customerInfo) return false;
+    return Object.keys(customerInfo.entitlements.active).length > 0;
+}
+
+export function isPurchasesSupported(): boolean {
+    return Platform.OS === 'ios' || Platform.OS === 'android';
+}
+
 class RevenueCatService {
     private static instance: RevenueCatService;
     private isInitialized = false;

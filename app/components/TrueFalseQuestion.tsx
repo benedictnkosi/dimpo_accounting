@@ -2,11 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { useTheme } from '@/contexts/ThemeContext';
-import { useSound } from '../contexts/SoundContext';
+import { brand } from '@/constants/matric';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { Audio } from 'expo-av';
 
 interface TrueFalseQuestionProps {
   id: string;
@@ -15,6 +14,7 @@ interface TrueFalseQuestionProps {
   explanation?: string;
   onContinue?: () => void;
   setIsQuestionAnswered: (answered: boolean) => void;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
 export function TrueFalseQuestion({
@@ -24,51 +24,12 @@ export function TrueFalseQuestion({
   explanation,
   onContinue,
   setIsQuestionAnswered,
+  onAttempt,
 }: TrueFalseQuestionProps) {
   const { colors } = useTheme();
-  const { soundEnabled } = useSound();
   const [selected, setSelected] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const soundRef = React.useRef<Audio.Sound | null>(null);
-
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    // Only play sound if sound is enabled
-    if (!soundEnabled) return;
-    
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundRef.current = soundObject;
-      // Unload after playback
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-          soundRef.current = null;
-        }
-      });
-    } catch (e) {
-      // fail silently
-    }
-  };
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
 
   useEffect(() => {
     setSelected(null);
@@ -83,10 +44,7 @@ export function TrueFalseQuestion({
     setIsAnswered(true);
     setIsQuestionAnswered(true);
     const isCorrect = value === answer;
-    
-    // Play sound feedback
-    playFeedbackSound(isCorrect ? 'correct' : 'wrong');
-    
+    onAttempt?.('answer', isCorrect);
     setFeedback(isCorrect ? 'Correct! 🎉' : `Incorrect. The answer is "${answer}"`);
   };
 
@@ -146,7 +104,7 @@ export function TrueFalseQuestion({
   return (
     <View style={styles.outerContainer}>
       <LinearGradient
-        colors={['#f0f9ff', '#e0e7ff']}
+        colors={[brand.card, brand.cardElevated]}
         style={styles.card}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -211,7 +169,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F6F8FA',
+    backgroundColor: 'transparent',
   },
   card: {
     width: '100%',
@@ -223,7 +181,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 12,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     marginVertical: 24,
     alignItems: 'center',
   },
@@ -232,7 +190,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     marginBottom: 18,
-    color: '#22223B',
+    color: brand.text,
     lineHeight: 32,
     letterSpacing: 0.1,
   },
@@ -262,7 +220,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     minHeight: 60,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -304,7 +262,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     flex: 1,
-    color: '#22223B',
+    color: brand.text,
   },
   feedback: {
     fontSize: 14,

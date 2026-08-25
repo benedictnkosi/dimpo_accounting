@@ -3,11 +3,10 @@ import { StyleSheet, Pressable, Animated, View } from 'react-native';
 import { ThemedText } from './ThemedText';
 import { ThemedView } from './ThemedView';
 import { useTheme } from '@/contexts/ThemeContext';
+import { brand } from '@/constants/matric';
 import { useFeedback } from '../contexts/FeedbackContext';
-import { useSound } from '../contexts/SoundContext';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Audio } from 'expo-av';
 import { QUESTION_TYPE_EMOJIS } from '../constants/questionTypeEmojis';
 
 interface TapToSelectQuestionProps {
@@ -19,6 +18,7 @@ interface TapToSelectQuestionProps {
   setIsQuestionAnswered: (answered: boolean) => void;
   emojis?: string[];
   subtext?: string;
+  onAttempt?: (stepId: string, correct: boolean) => void;
 }
 
 export function TapToSelectQuestion({
@@ -30,13 +30,12 @@ export function TapToSelectQuestion({
   setIsQuestionAnswered,
   emojis,
   subtext,
+  onAttempt,
 }: TapToSelectQuestionProps) {
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isAnswered, setIsAnswered] = useState(false);
   const { colors, isDark } = useTheme();
   const { setFeedback, resetFeedback } = useFeedback();
-  const { soundEnabled } = useSound();
-  const soundRef = React.useRef<Audio.Sound | null>(null);
   
   // Create animation values for each option
   const animationValues = useRef(
@@ -46,54 +45,13 @@ export function TapToSelectQuestion({
     }, {} as Record<string, Animated.Value>)
   ).current;
 
-  // Play feedback sound function
-  const playFeedbackSound = async (type: 'correct' | 'wrong') => {
-    // Only play sound if sound is enabled
-    if (!soundEnabled) return;
-    
-    try {
-      if (soundRef.current) {
-        await soundRef.current.unloadAsync();
-      }
-      const soundObject = new Audio.Sound();
-      const source =
-        type === 'correct'
-          ? require('../../assets/audio/correct.mp3')
-          : require('../../assets/audio/wrong.mp3');
-      await soundObject.loadAsync(source);
-      await soundObject.playAsync();
-      soundRef.current = soundObject;
-      // Unload after playback
-      soundObject.setOnPlaybackStatusUpdate((status) => {
-        if (status.isLoaded && status.didJustFinish) {
-          soundObject.unloadAsync();
-          soundRef.current = null;
-        }
-      });
-    } catch (e) {
-      // fail silently
-    }
-  };
-
-  // Cleanup sound on unmount
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
-
   const handleOptionPress = (option: string) => {
     if (isAnswered) return; // Prevent multiple selections
     
     setSelectedOption(option);
     setIsQuestionAnswered(true);
     setIsAnswered(true);
-
-    // Play sound feedback immediately
-    const isCorrect = option === answer;
-    playFeedbackSound(isCorrect ? 'correct' : 'wrong');
+    onAttempt?.('answer', option === answer);
 
     // Animate only the selected option
     const selectedAnim = animationValues[option];
@@ -187,7 +145,7 @@ export function TapToSelectQuestion({
       return [
         styles.optionButton,
         {
-          backgroundColor: isDark ? colors.surface : '#FFFFFF',
+          backgroundColor: brand.cardElevated,
           borderColor: isSelected ? colors.primary : colors.border,
         },
         isSelected && styles.selectedOption,
@@ -220,7 +178,7 @@ export function TapToSelectQuestion({
     return [
       styles.optionButton,
       {
-        backgroundColor: isDark ? colors.surface : '#FFFFFF',
+        backgroundColor: brand.cardElevated,
         borderColor: colors.border,
         opacity: 0.6,
       },
@@ -255,8 +213,8 @@ export function TapToSelectQuestion({
       return [
         styles.optionText,
         {
-          color: '#22223B',
-          fontWeight: '600' as const,
+          color: '#111827',
+          fontWeight: '700' as const,
         },
       ];
     }
@@ -272,7 +230,7 @@ export function TapToSelectQuestion({
   return (
     <View style={styles.outerContainer}>
       <LinearGradient
-        colors={isAnswered ? ['#e0ffe7', '#f0f9ff'] : ['#f0f9ff', '#e0e7ff']}
+        colors={isAnswered ? [brand.card, brand.cardElevated] : [brand.card, brand.cardElevated]}
         style={styles.card}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
@@ -379,7 +337,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,
-    backgroundColor: '#F6F8FA',
+    backgroundColor: 'transparent',
   },
   card: {
     width: '100%',
@@ -391,7 +349,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.16,
     shadowRadius: 24,
     elevation: 12,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     marginVertical: 24,
     alignItems: 'center',
   },
@@ -438,7 +396,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     borderWidth: 2,
     minHeight: 60,
-    backgroundColor: '#fff',
+    backgroundColor: brand.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
@@ -477,7 +435,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     flex: 1,
-    color: '#22223B',
+    color: brand.text,
   },
   optionContent: {
     flexDirection: 'row',

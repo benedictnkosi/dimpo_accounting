@@ -1,377 +1,356 @@
+import { useCallback, useEffect, useMemo, useState, type ComponentProps } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  View,
+} from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 
-import { Header } from '@/components/Header';
+import { HomeFooter, HomeHeader } from '@/components/home/HomeChrome';
+import { MasteryRing } from '@/components/home/MasteryRing';
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { HOST_URL } from '@/config/api';
-import { useTheme } from '@/contexts/ThemeContext';
+import { brand, SHARE_MESSAGE, SHARE_URL } from '@/constants/matric';
+import { useAuth } from '@/contexts/AuthContext';
 import { analytics } from '@/services/analytics';
+import { fetchSubtopicsByMainTopic } from '@/services/accounting';
+import {
+  getAccountingTopicProgressView,
+  getEffectiveStreak,
+  LearnerProgress,
+  loadLocalProgress,
+  SubjectProgressView,
+  syncProgressFromCloud,
+} from '@/services/progress';
+import { shareContent } from '@/utils/share';
 
-// Import the JSON data for main topics only
 import accountingData from '@/assets/accounting_full_33_subtopics.json';
-import topicEmojis from '@/assets/topic_emojis.json';
 
 interface Topic {
   id: string;
   name: string;
-  subtopics?: Subtopic[];
 }
 
 interface Subtopic {
   id: string;
   name: string;
-  levels: Level[];
+  levels: { id: string; name: string; unlocked: boolean }[];
 }
 
-interface Level {
-  id: string;
-  name: string;
-  unlocked: boolean;
-}
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
 
-interface ApiSubtopicResponse {
-  main_topic: string;
-  subtopics: {
-    topic: string;
-    levels: string[];
-  }[];
-}
-
-// Unique color for each topic card - updated for dark mode compatibility
-const TOPIC_COLORS: Record<string, { light: string; dark: string }> = {
-  'Financial Statements': { light: '#FDE68A', dark: '#92400E' },
-  'Cash Flow & Equity': { light: '#E0E7FF', dark: '#3730A3' },
-  'Ratio Analysis & Interpretation': { light: '#FEF3C7', dark: '#92400E' },
-  'Cost Concepts & Internal Control': { light: '#DBEAFE', dark: '#1E40AF' },
-  'Corporate Governance & Ethics': { light: '#FDE68A', dark: '#92400E' },
-  'Company Capital & Shareholders': { light: '#F3F4F6', dark: '#374151' },
-};
-
-// Topic descriptions with engaging content
-const TOPIC_DESCRIPTIONS: Record<string, { tagline: string; description: string }> = {
-  'Financial Statements': {
-    tagline: '🧾 Financial Statements',
-    description: 'Learn how businesses report income, expenses, and profit. Understand what the Income Statement and Balance Sheet really say. 📊💸'
-  },
-  'Cash Flow & Equity': {
-    tagline: '💵 Cash Flow & Equity',
-    description: 'Follow the cash! Track how money moves in and out, and how owners earn from shares and dividends. 🔁💰'
-  },
-  'Ratio Analysis & Interpretation': {
-    tagline: '📈 Ratio Analysis & Interpretation',
-    description: 'Use financial ratios to spot strengths, weaknesses, and red flags. It\'s business detective work. 🕵️‍♀️📉'
-  },
-  'Cost Concepts & Internal Control': {
-    tagline: '🛠 Cost Concepts & Internal Control',
-    description: 'Control stock, manage spending, and catch errors early. Learn how smart businesses stay efficient. 🧾📦🔒'
-  },
-  'Corporate Governance & Ethics': {
-    tagline: '🏛 Corporate Governance & Ethics',
-    description: 'Discover how companies stay fair and honest — from directors to auditors to whistleblowers. ⚖️🤝'
-  },
-  'Company Capital & Shareholders': {
-    tagline: '📉 Company Capital & Shareholders',
-    description: 'See how companies raise money through shares, pay dividends, and grow ownership. 📈💼'
-  },
+const TOPIC_ICONS: Record<string, { name: IoniconName; color: string }> = {
+  'Financial Statements': { name: 'document-text', color: '#F59E0B' },
+  'Cash Flow & Equity': { name: 'cash', color: '#38BDF8' },
+  'Ratio Analysis & Interpretation': { name: 'pie-chart', color: '#818CF8' },
+  'Cost Concepts & Internal Control': { name: 'calculator', color: '#FB923C' },
+  'Corporate Governance & Ethics': { name: 'briefcase', color: '#C084FC' },
+  'Company Capital & Shareholders': { name: 'people', color: '#34D399' },
 };
 
 export default function HomeScreen() {
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [topics, setTopics] = useState<Topic[]>([]);
+  const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { user } = useAuth();
 
-  // Load main topics from JSON file
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [progress, setProgress] = useState<LearnerProgress | null>(null);
+  const [openingTopicId, setOpeningTopicId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [shareLabel, setShareLabel] = useState('Share');
+
+  const streakCount = getEffectiveStreak(progress);
+  const slogan = 'Accounting prep that actually sticks.';
+
+  const streakTitle =
+    streakCount <= 0 ? 'Start a streak' : `${streakCount}-day streak`;
+  const streakSubtitle =
+    streakCount <= 0
+      ? 'Practice today to begin.'
+      : "Don't break it — practice today.";
+
+  const topicProgress = useMemo(() => {
+    const map: Record<string, SubjectProgressView> = {};
+    if (!progress) return map;
+    for (const topic of topics) {
+      const source = accountingData.topics.find((item) => item.name === topic.name);
+      const subtopicNames = source?.subtopics.map((subtopic) => subtopic.name) ?? [];
+      map[topic.name] = getAccountingTopicProgressView(progress, subtopicNames);
+    }
+    return map;
+  }, [progress, topics]);
+
   useEffect(() => {
-    const loadTopics = () => {
-      try {
-        // Only use the main topics from the JSON, without subtopics
-        const mainTopics = accountingData.topics.map(topic => ({
-          id: topic.id,
-          name: topic.name
-        }));
-        setTopics(mainTopics);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error loading topics:', error);
-        setError('Failed to load topics');
-        setIsLoading(false);
-      }
-    };
-
-    loadTopics();
+    setTopics(
+      accountingData.topics.map((topic) => ({
+        id: topic.id,
+        name: topic.name,
+      }))
+    );
   }, []);
 
-  // Track home screen view
+  const refreshProgress = useCallback(async () => {
+    try {
+      if (user?.uid) {
+        try {
+          setProgress(await syncProgressFromCloud(user.uid));
+          return;
+        } catch {
+          // Fall through to local progress.
+        }
+      }
+      setProgress(await loadLocalProgress());
+    } catch (err) {
+      console.error('Failed to load progress:', err);
+    }
+  }, [user?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProgress();
+    }, [refreshProgress])
+  );
+
   useEffect(() => {
     analytics.track('accounting_home_screen_viewed', {
       topics_count: topics.length,
-      is_loading: isLoading,
-      has_error: !!error
+      streak: streakCount,
     });
-  }, [topics.length, isLoading, error]);
-
-  const fetchSubtopics = async (topicName: string): Promise<{ topic: string; levels: string[] }[]> => {
-    try {
-      const response = await fetch(`${HOST_URL}/api/accounting-questions/main-topic/${encodeURIComponent(topicName)}/subtopics`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data: ApiSubtopicResponse = await response.json();
-      return data.subtopics;
-    } catch (error) {
-      console.error('Error fetching subtopics:', error);
-      throw error;
-    }
-  };
+  }, [topics.length, streakCount]);
 
   const handleTopicPress = async (topic: Topic) => {
+    if (openingTopicId) return;
+    setOpeningTopicId(topic.id);
+    setError(null);
+
     try {
-      // Show loading state
-      setIsLoading(true);
-      
-      // Fetch subtopics from API
-      const subtopicsData = await fetchSubtopics(topic.name);
-      
-      // Convert subtopic data to the expected format
+      const subtopicsData = await fetchSubtopicsByMainTopic(topic.name);
       const subtopics: Subtopic[] = subtopicsData.map((subtopicData, index) => ({
         id: `${topic.id}-subtopic-${index}`,
         name: subtopicData.topic,
         levels: subtopicData.levels.map((levelName, levelIndex) => ({
           id: `${topic.id}-subtopic-${index}-level-${levelIndex}`,
           name: levelName,
-          unlocked: true // You can modify this logic based on your requirements
-        }))
+          unlocked: true,
+        })),
       }));
 
-      // Track topic selection
       analytics.track('accounting_topic_selected', {
         topic_id: topic.id,
         topic_name: topic.name,
-        subtopics_count: subtopics.length
+        subtopics_count: subtopics.length,
       });
 
-      // Navigate to subtopics screen
       router.push({
         pathname: '/subtopics',
         params: {
           topicId: topic.id,
           topicName: topic.name,
-          subtopics: JSON.stringify(subtopics)
-        }
+          subtopics: JSON.stringify(subtopics),
+        },
       });
-    } catch (error) {
-      console.error('Error fetching subtopics:', error);
-      setError('Failed to load subtopics. Please try again.');
+    } catch (err) {
+      console.error('Error fetching subtopics:', err);
+      setError('Failed to load topics. Please try again.');
     } finally {
-      setIsLoading(false);
+      setOpeningTopicId(null);
     }
   };
 
-  const handleShareApp = async () => {
-    try {
-      // Track app sharing
-      analytics.track('accounting_app_shared', {
-        platform: 'home_screen',
-        share_method: 'native_share'
-      });
-
-      const iosLink = 'https://apps.apple.com/app/dimpo-accounting/6742684696';
-      const androidLink = 'https://play.google.com/store/apps/details?id=com.dimpoaccounting';
-      
-      await Share.share({
-        message: `Check out this amazing accounting learning app! 📊💰 Master Financial Statements, Ratio Analysis, and more with interactive lessons.\n\nDownload now:\n📱 iOS: ${iosLink}\n🤖 Android: ${androidLink}`,
-        title: 'Dimpo Accounting App',
-      });
-    } catch (error) {
-      console.error('Error sharing app:', error);
-    }
+  const handleShare = async () => {
+    analytics.track('accounting_app_shared', {
+      platform: 'home_screen',
+      share_method: 'native_share',
+    });
+    const result = await shareContent({
+      message: `${SHARE_MESSAGE}\n${SHARE_URL}`,
+      url: SHARE_URL,
+      title: 'Accounting CPA QUIZ',
+    });
+    if (!result.ok) return;
+    setShareLabel('Shared');
+    setTimeout(() => setShareLabel('Share'), 2000);
   };
-
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      paddingTop: 20,
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-      paddingVertical: 40,
-    },
-    loadingText: {
-      marginTop: 12,
-      fontSize: 16,
-      opacity: 0.7,
-    },
-    titleContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 12,
-    },
-    topicsContainer: {
-      flexDirection: 'column',
-      gap: 16,
-      paddingHorizontal: 20,
-      paddingBottom: 24,
-    },
-    topicCard: {
-      paddingVertical: 28,
-      paddingHorizontal: 20,
-      borderRadius: 18,
-      width: '100%',
-      alignItems: 'center',
-      marginBottom: 8,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.10,
-      shadowRadius: 8,
-      elevation: 3,
-      borderWidth: 1,
-      borderColor: isDark ? colors.border : '#e6e6e6',
-    },
-    topicCardPressed: {
-      opacity: 0.85,
-      transform: [{ scale: 0.97 }],
-    },
-    topicEmoji: {
-      fontSize: 40,
-      marginBottom: 10,
-      paddingTop: 20,
-    },
-    topicName: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      marginBottom: 8,
-      color: colors.text,
-      textAlign: 'center',
-    },
-    topicTagline: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: colors.text,
-      marginBottom: 6,
-      textAlign: 'center',
-      lineHeight: 18,
-    },
-    topicDescription: {
-      fontSize: 12,
-      opacity: 0.8,
-      color: colors.textSecondary,
-      marginBottom: 8,
-      textAlign: 'center',
-      lineHeight: 16,
-      paddingHorizontal: 8,
-    },
-    topicDifficulty: {
-      fontSize: 11,
-      color: colors.textSecondary,
-      marginTop: 4,
-      fontWeight: '500',
-    },
-    headerImage: {
-      height: 200,
-      width: '100%',
-    },
-    shareButton: {
-      backgroundColor: colors.primary,
-      paddingVertical: 16,
-      paddingHorizontal: 24,
-      borderRadius: 12,
-      marginHorizontal: 20,
-      marginTop: 20,
-      marginBottom: 40,
-      alignItems: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.1,
-      shadowRadius: 4,
-      elevation: 3,
-    },
-    shareButtonPressed: {
-      opacity: 0.8,
-      transform: [{ scale: 0.98 }],
-    },
-    shareButtonText: {
-      color: '#fff',
-      fontSize: 16,
-      fontWeight: '600',
-    },
-  });
 
   return (
-    <ScrollView style={{ flex: 1 }}>
-      <Header />
-      <ThemedView style={styles.container}>
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color={colors.primary} />
-            <ThemedText style={styles.loadingText}>Loading topics...</ThemedText>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
+        <HomeHeader />
+        <ThemedText style={styles.slogan}>{slogan}</ThemedText>
+
+        <View style={styles.streakCard} accessibilityLabel={streakTitle}>
+          <View style={styles.streakIcon}>
+            <Ionicons name="flame" size={22} color="#FFFFFF" />
           </View>
-        ) : error ? (
-          <ThemedText>{error}</ThemedText>
-        ) : (
-          <View>
-            <ThemedView style={styles.topicsContainer}>
-              {topics.map((topic) => (
-                <Pressable
-                  key={topic.id}
-                  style={({ pressed }) => [
-                    [
-                      styles.topicCard,
-                      {
-                        backgroundColor: TOPIC_COLORS[topic.name]
-                          ? (isDark
-                            ? TOPIC_COLORS[topic.name].dark
-                            : TOPIC_COLORS[topic.name].light)
-                          : isDark
-                            ? colors.surface
-                            : '#fff'
-                      },
-                    ],
-                    pressed && styles.topicCardPressed,
-                  ]}
-                  onPress={() => handleTopicPress(topic)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Select ${topic.name}`}
-                >
-                  <ThemedText style={styles.topicEmoji}>
-                    {(topicEmojis.topic_emojis as any)[topic.name] || '📊'}
-                  </ThemedText>
-                  <ThemedText style={styles.topicName}>
+          <View style={styles.streakCopy}>
+            <ThemedText style={styles.streakTitle}>{streakTitle}</ThemedText>
+            <ThemedText style={styles.streakSubtitle}>{streakSubtitle}</ThemedText>
+          </View>
+        </View>
+
+        <ThemedText style={styles.sectionLabel}>SUBJECTS</ThemedText>
+        {error ? <ThemedText style={styles.errorText}>{error}</ThemedText> : null}
+        <View style={styles.subjectList}>
+          {topics.map((topic) => {
+            const icon = TOPIC_ICONS[topic.name] || { name: 'book' as const, color: brand.primary };
+            const stats = topicProgress[topic.name];
+            const isOpening = openingTopicId === topic.id;
+            return (
+              <Pressable
+                key={topic.id}
+                disabled={!!openingTopicId}
+                onPress={() => handleTopicPress(topic)}
+                style={({ pressed }) => [styles.subjectCard, pressed && styles.pressed]}
+                accessibilityRole="button"
+                accessibilityLabel={topic.name}
+              >
+                <View style={[styles.subjectIcon, { backgroundColor: icon.color }]}>
+                  {isOpening ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Ionicons name={icon.name} size={20} color="#FFFFFF" />
+                  )}
+                </View>
+                <View style={styles.cardCopy}>
+                  <ThemedText style={styles.cardTitle} numberOfLines={2}>
                     {topic.name}
                   </ThemedText>
-                 
-                  <ThemedText style={styles.topicDescription}>
-                    {TOPIC_DESCRIPTIONS[topic.name]?.description || 'No description available'}
+                  <ThemedText style={styles.cardSubtitle}>
+                    Level {stats?.level ?? 1} · {stats?.label ?? 'Not achieved'}
                   </ThemedText>
-                </Pressable>
-              ))}
-            </ThemedView>
-            
-            <Pressable
-              style={({ pressed }) => [
-                styles.shareButton,
-                pressed && styles.shareButtonPressed,
-              ]}
-              onPress={handleShareApp}
-              accessibilityRole="button"
-              accessibilityLabel="Share app"
-            >
-              <ThemedText style={styles.shareButtonText}>
-              🔗 Invite friends
-              </ThemedText>
-            </Pressable>
-          </View>
-        )}
-      </ThemedView>
-    </ScrollView>
+                </View>
+                <MasteryRing percent={stats?.mastery ?? 0} />
+                <Ionicons name="chevron-forward" size={18} color={brand.text} />
+              </Pressable>
+            );
+          })}
+        </View>
+      </ScrollView>
+
+      <View style={{ paddingBottom: insets.bottom }}>
+        <HomeFooter
+          onProfile={() => router.push('/profile')}
+          onShare={handleShare}
+          shareLabel={shareLabel}
+        />
+      </View>
+    </View>
   );
 }
 
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: brand.background,
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    paddingBottom: 28,
+  },
+  slogan: {
+    textAlign: 'center',
+    color: brand.textSecondary,
+    fontSize: 16,
+    fontWeight: '500',
+    marginTop: 10,
+    marginBottom: 22,
+    paddingHorizontal: 24,
+  },
+  streakCard: {
+    marginHorizontal: 20,
+    marginBottom: 28,
+    borderRadius: 22,
+    borderWidth: 1.5,
+    borderColor: 'rgba(245, 158, 11, 0.55)',
+    backgroundColor: brand.card,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  streakIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: '#F97316',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  streakCopy: {
+    flex: 1,
+  },
+  streakTitle: {
+    color: brand.text,
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  streakSubtitle: {
+    color: brand.textSecondary,
+    fontSize: 14,
+    marginTop: 2,
+  },
+  sectionLabel: {
+    color: brand.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    marginHorizontal: 20,
+    marginBottom: 10,
+  },
+  subjectList: {
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  subjectCard: {
+    borderRadius: 22,
+    backgroundColor: brand.card,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  subjectIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardTitle: {
+    color: brand.text,
+    fontSize: 17,
+    fontWeight: '800',
+  },
+  cardSubtitle: {
+    color: brand.textSecondary,
+    fontSize: 13,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  errorText: {
+    color: brand.rose,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    fontSize: 14,
+  },
+  pressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+});

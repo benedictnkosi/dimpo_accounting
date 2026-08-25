@@ -1,15 +1,14 @@
 import { ThemedText } from '@/components/ThemedText';
 import { HOST_URL } from '@/config/api';
+import { brand } from '@/constants/matric';
 import { useTheme } from '@/contexts/ThemeContext';
 import { analytics } from '@/services/analytics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import React from 'react';
 import { Animated, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFeedback } from '../contexts/FeedbackContext';
-import { useSound } from '../contexts/SoundContext';
 
 interface FeedbackButtonProps {
     isDisabled: boolean;
@@ -82,44 +81,13 @@ export function FeedbackButton({ isDisabled, onCheck, onContinue }: FeedbackButt
     const { width } = useWindowDimensions();
     const scale = React.useRef(new Animated.Value(1)).current;
     const insets = useSafeAreaInsets();
-    const soundRef = React.useRef<Audio.Sound | null>(null);
     const latestFeedbackRef = React.useRef({ isCorrect });
     const { colors, isDark } = useTheme();
-    const { soundEnabled } = useSound();
 
     // Update ref when feedback changes
     React.useEffect(() => {
         latestFeedbackRef.current = { isCorrect };
     }, [isCorrect]);
-
-    // Play feedback sound
-    async function playFeedbackSound(type: 'correct' | 'wrong') {
-        // Only play sound if sound is enabled
-        if (!soundEnabled) return;
-        
-        try {
-            if (soundRef.current) {
-                await soundRef.current.unloadAsync();
-            }
-            const soundObject = new Audio.Sound();
-            const source =
-                type === 'correct'
-                    ? require('../../assets/audio/correct.mp3')
-                    : require('../../assets/audio/wrong.mp3');
-            await soundObject.loadAsync(source);
-            await soundObject.playAsync();
-            soundRef.current = soundObject;
-            // Unload after playback
-            soundObject.setOnPlaybackStatusUpdate((status) => {
-                if (status.isLoaded && status.didJustFinish) {
-                    soundObject.unloadAsync();
-                    soundRef.current = null;
-                }
-            });
-        } catch (e) {
-            // fail silently
-        }
-    }
 
     const handlePressIn = () => {
         Animated.spring(scale, {
@@ -153,7 +121,6 @@ export function FeedbackButton({ isDisabled, onCheck, onContinue }: FeedbackButt
             } catch (e) {
                 // fail silently
             }
-            playFeedbackSound(latestFeedbackRef.current.isCorrect ? 'correct' : 'wrong');
         }, 100);
     };
 
@@ -190,14 +157,6 @@ export function FeedbackButton({ isDisabled, onCheck, onContinue }: FeedbackButt
         useGradient = true;
     }
 
-    React.useEffect(() => {
-        return () => {
-            if (soundRef.current) {
-                soundRef.current.unloadAsync();
-            }
-        };
-    }, []);
-
     return (
         <View style={[styles.stickyButtonContainer, { width, paddingBottom: insets.bottom + 16 }]}>
             <Animated.View style={{ width: '100%', transform: [{ scale }] }}>
@@ -226,7 +185,7 @@ export function FeedbackButton({ isDisabled, onCheck, onContinue }: FeedbackButt
                     <Pressable
                         style={[
                             buttonStyle,
-                            isDisabled && { borderColor: isDark ? colors.border : '#E5E7EB', borderWidth: 1 }
+                            isDisabled && { borderColor: colors.border, borderWidth: 1 }
                         ]}
                         onPress={isChecked ? onContinue : handleCheck}
                         disabled={isDisabled}
@@ -289,8 +248,8 @@ const styles = StyleSheet.create({
         backgroundColor: '#EF4444',
     },
     buttonDisabled: {
-        backgroundColor: '#F3F4F6',
-        borderColor: '#E5E7EB',
+        backgroundColor: brand.cardElevated,
+        borderColor: brand.border,
         borderWidth: 1,
     },
     buttonText: {

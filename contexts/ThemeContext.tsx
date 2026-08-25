@@ -1,5 +1,4 @@
 import React, { createContext, useContext } from 'react';
-import { useColorScheme } from 'react-native';
 
 interface ThemeContextType {
     isDark: boolean;
@@ -29,25 +28,25 @@ export const lightColors = {
 };
 
 export const darkColors = {
-    background: '#0F172A',
-    surface: '#1E293B',
-    surfaceHigh: '#334155',
-    card: '#1E293B',
-    text: '#FFFFFF',
+    background: '#0B1220',
+    surface: '#121A2A',
+    surfaceHigh: '#1A2436',
+    card: '#161F30',
+    text: '#F8FAFC',
     textSecondary: '#94A3B8',
-    primary: '#6366F1',
-    secondary: '#A855F7',
+    primary: '#14B8A6',
+    secondary: '#2DD4BF',
     accent: '#F59E0B',
     border: '#334155',
-    error: '#EF4444',
+    error: '#F43F5E',
     success: '#22C55E',
     placeholder: '#64748B',
     disabled: '#334155',
     backdrop: 'rgba(0, 0, 0, 0.7)',
     buttonText: '#FFFFFF',
-    link: '#60A5FA',
-    gradientStart: '#6366F1',
-    gradientEnd: '#A855F7',
+    link: '#2DD4BF',
+    gradientStart: '#14B8A6',
+    gradientEnd: '#22C55E',
 };
 
 const ThemeContext = createContext<ThemeContextType>({
@@ -56,9 +55,9 @@ const ThemeContext = createContext<ThemeContextType>({
 });
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-    const colorScheme = useColorScheme();
-    const isDark = colorScheme === 'dark';
-    const colors = isDark ? darkColors : lightColors;
+    // Matric Unlocked is a dark-first study experience.
+    const isDark = true;
+    const colors = darkColors;
 
     return (
         <ThemeContext.Provider value={{ isDark, colors }}>

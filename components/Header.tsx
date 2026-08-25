@@ -96,10 +96,10 @@ export function Header() {
       <View style={styles.row}>
         <View style={styles.greetingSection}>
           <ThemedText style={[styles.greetingText, { color: isDark ? '#F3F4F6' : '#22223B' }]}>
-            Dimpo Language <ThemedText style={styles.wave}>🇿🇦</ThemedText>
+            Accounting CPA QUIZ <ThemedText style={styles.wave}>🇿🇦</ThemedText>
           </ThemedText>
           <ThemedText style={[styles.schoolText, { color: isDark ? '#9CA3AF' : '#64748B' }]}>
-            Learn to speak Mzansi
+            Master Grade 12 Accounting
           </ThemedText>
         </View>
         <TouchableOpacity onPress={() => router.push('/profile')}>

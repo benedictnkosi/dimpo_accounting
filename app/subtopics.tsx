@@ -1,15 +1,24 @@
-import { useRouter, useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentProps } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
 import { ThemedText } from '@/components/ThemedText';
-import { ThemedView } from '@/components/ThemedView';
-import { useTheme } from '@/contexts/ThemeContext';
+import { MasteryRing } from '@/components/home/MasteryRing';
+import { brand } from '@/constants/matric';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { analytics } from '@/services/analytics';
-import subtopicEmojis from '@/assets/subtopic_emojis.json';
-import topicEmojis from '@/assets/topic_emojis.json';
+import {
+  getAccountingLevelMastery,
+  isAccountingLevelUnlocked,
+  isPremiumAccountingLevel,
+  loadLocalProgress,
+  syncProgressFromCloud,
+  type LearnerProgress,
+} from '@/services/progress';
 
 interface Topic {
   id: string;
@@ -29,21 +38,26 @@ interface Level {
   unlocked: boolean;
 }
 
-// Fun color palette for subtopic cards
-const cardColors = [
-  '#FFD6E0', // pink
-  '#D6EFFF', // light blue
-  '#FFF9D6', // yellow
-  '#D6FFD9', // mint
-  '#F3D6FF', // lavender
-  '#FFE6D6', // peach
-  '#D6FFF6', // aqua
-  '#F9D6FF', // light purple
-  '#FFF3D6', // cream
-  '#D6F6FF', // sky
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+const TOPIC_ICONS: Record<string, { name: IoniconName; color: string }> = {
+  'Financial Statements': { name: 'document-text', color: '#F59E0B' },
+  'Cash Flow & Equity': { name: 'cash', color: '#38BDF8' },
+  'Ratio Analysis & Interpretation': { name: 'pie-chart', color: '#818CF8' },
+  'Cost Concepts & Internal Control': { name: 'calculator', color: '#FB923C' },
+  'Corporate Governance & Ethics': { name: 'briefcase', color: '#C084FC' },
+  'Company Capital & Shareholders': { name: 'people', color: '#34D399' },
+};
+
+const SUBTOPIC_ICONS: { name: IoniconName; color: string }[] = [
+  { name: 'layers', color: '#C084FC' },
+  { name: 'reader', color: '#38BDF8' },
+  { name: 'stats-chart', color: '#F59E0B' },
+  { name: 'wallet', color: '#34D399' },
+  { name: 'git-branch', color: '#FB923C' },
+  { name: 'shield-checkmark', color: '#818CF8' },
 ];
 
-// Level details mapping using level.name as key
 const levelDetails: Record<string, { goal: string; useCase: string }> = {
   'Level 1: Basics': {
     goal: 'Recognize terms, categorize accounts, understand the purpose of the topic',
@@ -57,72 +71,101 @@ const levelDetails: Record<string, { goal: string; useCase: string }> = {
     goal: 'Apply real-world scenarios, journal updates, financial statement edits',
     useCase: 'Prep for complex examples',
   },
+  'Level 3: Application': {
+    goal: 'Apply real-world scenarios, journal updates, financial statement edits',
+    useCase: 'Prep for complex examples',
+  },
+  'Level 3: Advanced': {
+    goal: 'Apply real-world scenarios, journal updates, financial statement edits',
+    useCase: 'Prep for complex examples',
+  },
   'Level 4: Challenge Mode': {
+    goal: 'Solve integrated exam-style problems with distractors or time pressure',
+    useCase: 'Exam prep, confident learners',
+  },
+  'Level 4: Challenge': {
+    goal: 'Solve integrated exam-style problems with distractors or time pressure',
+    useCase: 'Exam prep, confident learners',
+  },
+  'Level 4: Expert': {
     goal: 'Solve integrated exam-style problems with distractors or time pressure',
     useCase: 'Exam prep, confident learners',
   },
 };
 
-// Add emoji mapping for each level
-const levelEmojis: Record<string, string> = {
-  'Level 1: Basics': '🧠✨',
-  'Level 2: Core Practice': '🛠️📘',
-  'Level 3: Adjustments': '🧾🔍',
-  'Level 4: Challenge Mode': '🎯🔥',
-};
+function levelVisual(name: string): { name: IoniconName; color: string } {
+  if (name.includes('Level 1')) return { name: 'sparkles', color: '#818CF8' };
+  if (name.includes('Level 2')) return { name: 'construct', color: '#FB923C' };
+  if (name.includes('Level 3')) return { name: 'search', color: '#38BDF8' };
+  return { name: 'flame', color: '#F97316' };
+}
 
 export default function SubtopicsScreen() {
   const { topicId, topicName, subtopics } = useLocalSearchParams();
   const [topic, setTopic] = useState<Topic | null>(null);
+  const [progress, setProgress] = useState<LearnerProgress | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { user } = useAuth();
+  const { isPremium, presentPaywall } = useRevenueCat();
   const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
+  const paywallOpenRef = useRef(false);
 
   useEffect(() => {
-    const loadTopic = () => {
-      try {
-        // Parse subtopics from route params
-        let parsedSubtopics: Subtopic[] = [];
-        
-        if (subtopics && typeof subtopics === 'string') {
-          try {
-            parsedSubtopics = JSON.parse(subtopics);
-          } catch (parseError) {
-            console.error('Error parsing subtopics:', parseError);
-          }
+    try {
+      let parsedSubtopics: Subtopic[] = [];
+      if (subtopics && typeof subtopics === 'string') {
+        try {
+          parsedSubtopics = JSON.parse(subtopics);
+        } catch (parseError) {
+          console.error('Error parsing subtopics:', parseError);
         }
-
-        // Create topic object with parsed subtopics
-        const topicData: Topic = {
-          id: topicId as string,
-          name: topicName as string,
-          subtopics: parsedSubtopics
-        };
-
-        setTopic(topicData);
-        setIsLoading(false);
-      } catch (error) {
-        console.error('Error loading topic:', error);
-        setIsLoading(false);
       }
-    };
 
-    loadTopic();
+      setTopic({
+        id: topicId as string,
+        name: topicName as string,
+        subtopics: parsedSubtopics,
+      });
+    } catch (error) {
+      console.error('Error loading topic:', error);
+    } finally {
+      setIsLoading(false);
+    }
   }, [topicId, topicName, subtopics]);
 
-  const handleLevelPress = (subtopic: Subtopic, level: Level) => {
-    if (!level.unlocked) return; // Don't allow clicking locked levels
-    
+  const refreshProgress = useCallback(async () => {
+    try {
+      if (user?.uid) {
+        try {
+          setProgress(await syncProgressFromCloud(user.uid));
+          return;
+        } catch {
+          // Fall through to local progress.
+        }
+      }
+      setProgress(await loadLocalProgress());
+    } catch (err) {
+      console.error('Failed to load accounting level progress:', err);
+    }
+  }, [user?.uid]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void refreshProgress();
+    }, [refreshProgress])
+  );
+
+  const openLesson = (subtopic: Subtopic, level: Level, grantedFromPaywall = false) => {
     analytics.track('accounting_level_selected', {
       topic_id: topicId,
       topic_name: topicName,
       subtopic_id: subtopic.id,
       subtopic_name: subtopic.name,
       level_id: level.id,
-      level_name: level.name
+      level_name: level.name,
     });
 
-    // Navigate to accounting lesson screen with level info
     router.push({
       pathname: '/accounting-lesson',
       params: {
@@ -131,282 +174,305 @@ export default function SubtopicsScreen() {
         subtopicId: subtopic.id,
         subtopicName: subtopic.name,
         levelId: level.id,
-        levelName: level.name
-      }
+        levelName: level.name,
+        ...(grantedFromPaywall ? { accessGranted: '1' } : {}),
+      },
     });
   };
 
-  const handleBackPress = () => {
-    router.back();
+  const handleLevelPress = async (
+    subtopic: Subtopic,
+    level: Level,
+    progressUnlocked: boolean,
+    premiumLocked: boolean
+  ) => {
+    if (!progressUnlocked) return;
+
+    if (premiumLocked) {
+      if (paywallOpenRef.current) return;
+      paywallOpenRef.current = true;
+      analytics.track('accounting_premium_level_locked', {
+        topic_id: topicId,
+        topic_name: topicName,
+        subtopic_id: subtopic.id,
+        subtopic_name: subtopic.name,
+        level_id: level.id,
+        level_name: level.name,
+      });
+      try {
+        const unlockedPremium = await presentPaywall(user?.uid);
+        if (!unlockedPremium) return;
+        openLesson(subtopic, level, true);
+      } finally {
+        paywallOpenRef.current = false;
+      }
+      return;
+    }
+
+    openLesson(subtopic, level);
   };
 
-  const styles = StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: isDark ? '#181926' : '#F7F7FA', // soft background
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingVertical: 16,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.border,
-      backgroundColor: isDark ? colors.surface : '#fff',
-    },
-    headerTitleContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      flex: 1,
-      minWidth: 0,
-    },
-    backButton: {
-      padding: 8,
-      marginRight: 12,
-    },
-    headerTitle: {
-      fontSize: 18,
-      fontWeight: 'bold',
-      color: colors.text,
-      flexShrink: 1,
-      flexWrap: 'wrap',
-      minWidth: 0,
-    },
-    content: {
-      flex: 1,
-      paddingHorizontal: 12,
-      paddingTop: 16,
-      paddingBottom: 32,
-    },
-    loadingContainer: {
-      flex: 1,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    subtopicsContainer: {
-      gap: 18,
-    },
-    subtopicCard: {
-      backgroundColor: isDark ? colors.surface : '#fff',
-      paddingVertical: 22,
-      paddingHorizontal: 18,
-      borderRadius: 18,
-      borderWidth: 0,
-      marginBottom: 10,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.10,
-      shadowRadius: 10,
-      elevation: 4,
-    },
-    subtopicName: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: colors.text,
-      marginBottom: 14,
-      letterSpacing: 0.1,
-    },
-    subtopicNameContainer: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 14,
-    },
-    subtopicEmoji: {
-      fontSize: 20,
-      marginRight: 10,
-    },
-    levelsContainer: {
-      flexDirection: 'column',
-      gap: 16,
-      flexWrap: 'nowrap',
-    },
-    levelCard: {
-      width: '100%',
-      alignSelf: 'center',
-      backgroundColor: '#fff',
-      borderRadius: 16,
-      padding: 14,
-      marginRight: 0,
-      marginBottom: 16,
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.08,
-      shadowRadius: 8,
-      elevation: 3,
-      borderWidth: 1,
-      borderColor: '#eee',
-    },
-    levelCardLocked: {
-      backgroundColor: '#f3f3f3',
-      borderColor: '#e0e0e0',
-    },
-    levelCardPressed: {
-      opacity: 0.85,
-      transform: [{ scale: 0.97 }],
-    },
-    levelCardHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      marginBottom: 6,
-    },
-    levelCardTitle: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: '#6C47FF',
-      marginLeft: 2,
-    },
-    levelCardGoal: {
-      fontSize: 12,
-      color: '#333',
-      marginBottom: 2,
-    },
-    levelCardUseCase: {
-      fontSize: 11,
-      color: '#888',
-    },
-    levelBadge: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 14,
-      paddingVertical: 6,
-      borderRadius: 999,
-      backgroundColor: colors.primary + '18',
-      marginRight: 0,
-      marginBottom: 4,
-    },
-    levelBadgePressed: {
-      opacity: 0.8,
-      transform: [{ scale: 0.95 }],
-    },
-    levelText: {
-      fontSize: 13,
-      color: colors.primary,
-      fontWeight: '600',
-      letterSpacing: 0.1,
-    },
-    lockedLevelBadge: {
-      backgroundColor: colors.textSecondary + '18',
-    },
-    lockedLevelText: {
-      color: colors.textSecondary,
-      fontWeight: '500',
-    },
-    lockIcon: {
-      marginRight: 5,
-      fontSize: 14,
-      color: colors.textSecondary,
-    },
-  });
+  const topicIcon = TOPIC_ICONS[String(topicName)] || { name: 'book' as const, color: brand.primary };
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary} />
-          <ThemedText style={{ marginTop: 12, color: colors.textSecondary }}>
-            Loading subtopics...
-          </ThemedText>
+      <View style={[styles.screen, { paddingTop: insets.top }]}>
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={brand.primary} />
+          <ThemedText style={styles.muted}>Loading topics...</ThemedText>
         </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (!topic) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Pressable style={styles.backButton} onPress={handleBackPress}>
-            <ThemedText style={{ fontSize: 18, color: colors.primary }}>
-              ← 
-            </ThemedText>
-          </Pressable>
-        </View>
-        <View style={styles.loadingContainer}>
-          <ThemedText style={{ color: colors.textSecondary }}>
-            Topic not found
-          </ThemedText>
-        </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <View style={[styles.screen, { paddingTop: insets.top }]}>
       <View style={styles.header}>
-        <Pressable style={styles.backButton} onPress={handleBackPress}>
-          <ThemedText style={{ fontSize: 18, color: colors.primary }}>
-            ← 
-          </ThemedText>
+        <Pressable
+          onPress={() => router.back()}
+          style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <Ionicons name="chevron-back" size={24} color={brand.primarySoft} />
         </Pressable>
-        <View style={styles.headerTitleContainer}>
-          <ThemedText style={{ fontSize: 24, marginRight: 8 }}>
-            {(topicEmojis.topic_emojis as any)[topic.name] || '📘'}
-          </ThemedText>
-          <ThemedText style={styles.headerTitle} numberOfLines={2} ellipsizeMode="tail">
-            {topic.name}
-          </ThemedText>
+        <View style={[styles.topicIcon, { backgroundColor: topicIcon.color }]}>
+          <Ionicons name={topicIcon.name} size={18} color="#FFFFFF" />
         </View>
+        <ThemedText style={styles.headerTitle} numberOfLines={2}>
+          {topic?.name || 'Topics'}
+        </ThemedText>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.subtopicsContainer}>
-          {topic.subtopics.map((subtopic, idx) => (
-            <View
-              key={subtopic.id}
-              style={[
-                styles.subtopicCard,
-                { backgroundColor: cardColors[idx % cardColors.length], borderWidth: 0, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, elevation: 6 },
-              ]}
-            >
-              <View style={styles.subtopicNameContainer}>
-                <ThemedText style={[styles.subtopicEmoji, { fontSize: 28 }]}> {/* Larger emoji */}
-                  {(subtopicEmojis.subtopic_emojis as any)[subtopic.name] || '📚'}
-                </ThemedText>
-                <ThemedText style={[styles.subtopicName, { fontSize: 14 }]}> {/* Larger name */}
-                  {subtopic.name}
-                </ThemedText>
-              </View>
-              <View style={styles.levelsContainer}>
-                {subtopic.levels.map((level) => {
-                  const details = levelDetails[level.name] || {};
-                  const emoji = levelEmojis[level.name] || '';
-                  return (
-                    <Pressable
-                      key={level.id}
-                      style={({ pressed }) => [
-                        styles.levelCard,
-                        !level.unlocked && styles.levelCardLocked,
-                        pressed && level.unlocked && styles.levelCardPressed,
-                      ]}
-                      onPress={() => handleLevelPress(subtopic, level)}
-                      disabled={!level.unlocked}
-                    >
-                      <View style={styles.levelCardHeader}>
-                        {!level.unlocked && (
-                          <Ionicons name="lock-closed" style={styles.lockIcon} />
-                        )}
-                        <ThemedText style={{ fontSize: 18, marginRight: 6 }}>{emoji}</ThemedText>
-                        <ThemedText style={[
-                          styles.levelCardTitle,
-                          !level.unlocked && styles.lockedLevelText,
-                        ]}>
-                          {level.name}
-                        </ThemedText>
-                      </View>
-                      <ThemedText style={styles.levelCardGoal}>
-                        {details.goal}
-                      </ThemedText>
-                      <ThemedText style={styles.levelCardUseCase}>
-                        {details.useCase}
-                      </ThemedText>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </View>
-          ))}
+      {!topic ? (
+        <View style={styles.centered}>
+          <ThemedText style={styles.muted}>Topic not found</ThemedText>
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      ) : (
+        <ScrollView
+          style={styles.scroll}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 28 }]}
+          showsVerticalScrollIndicator={false}
+        >
+          {topic.subtopics.map((subtopic, index) => {
+            const sectionIcon = SUBTOPIC_ICONS[index % SUBTOPIC_ICONS.length];
+            return (
+              <View key={subtopic.id} style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <View style={[styles.sectionIcon, { backgroundColor: sectionIcon.color }]}>
+                    <Ionicons name={sectionIcon.name} size={16} color="#FFFFFF" />
+                  </View>
+                  <ThemedText style={styles.sectionLabel} numberOfLines={2}>
+                    {subtopic.name.toUpperCase()}
+                  </ThemedText>
+                </View>
+
+                <View style={styles.levelList}>
+                  {subtopic.levels.map((level, levelIndex) => {
+                    const details = levelDetails[level.name] || {};
+                    const visual = levelVisual(level.name);
+                    const unlocked = isAccountingLevelUnlocked(
+                      progress,
+                      subtopic.name,
+                      subtopic.levels,
+                      levelIndex
+                    );
+                    const premiumLocked = isPremiumAccountingLevel(level.name) && !isPremium;
+                    const mastery = unlocked
+                      ? getAccountingLevelMastery(progress, subtopic.name, level.name)
+                      : null;
+                    const meta = unlocked
+                      ? mastery && mastery.attempted > 0
+                        ? `${mastery.correct} correct · ${mastery.incorrect} incorrect`
+                        : details.useCase
+                      : 'Complete the previous level to unlock';
+                    return (
+                      <Pressable
+                        key={level.id}
+                        disabled={!unlocked}
+                        onPress={() => handleLevelPress(subtopic, level, unlocked, premiumLocked)}
+                        style={({ pressed }) => [
+                          styles.levelCard,
+                          !unlocked && styles.levelCardLocked,
+                          pressed && unlocked && styles.pressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          unlocked
+                            ? mastery && mastery.attempted > 0
+                              ? `${level.name}, ${mastery.mastery} percent mastery`
+                              : level.name
+                            : `${level.name}, locked`
+                        }
+                        accessibilityState={{ disabled: !unlocked }}
+                      >
+                        <View style={[styles.levelIcon, { backgroundColor: visual.color }]}>
+                          <Ionicons
+                            name={unlocked ? visual.name : 'lock-closed'}
+                            size={18}
+                            color="#FFFFFF"
+                          />
+                        </View>
+                        <View style={styles.cardCopy}>
+                          <ThemedText
+                            style={[styles.cardTitle, !unlocked && styles.lockedText]}
+                            numberOfLines={1}
+                          >
+                            {level.name}
+                          </ThemedText>
+                          {!!details.goal && (
+                            <ThemedText style={styles.cardSubtitle} numberOfLines={2}>
+                              {details.goal}
+                            </ThemedText>
+                          )}
+                          {!!meta && (
+                            <ThemedText style={styles.cardMeta} numberOfLines={1}>
+                              {meta}
+                            </ThemedText>
+                          )}
+                        </View>
+                        {unlocked ? (
+                          <MasteryRing percent={mastery?.mastery ?? 0} size={44} />
+                        ) : null}
+                        <Ionicons
+                          name={unlocked ? 'chevron-forward' : 'lock-closed'}
+                          size={18}
+                          color={unlocked ? brand.text : brand.textMuted}
+                        />
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      )}
+    </View>
   );
-} 
+}
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: brand.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  backButton: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topicIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    color: brand.text,
+    fontSize: 20,
+    fontWeight: '800',
+    letterSpacing: -0.3,
+  },
+  scroll: {
+    flex: 1,
+  },
+  content: {
+    paddingTop: 8,
+  },
+  centered: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  muted: {
+    color: brand.textSecondary,
+    marginTop: 12,
+    fontSize: 15,
+  },
+  section: {
+    marginBottom: 28,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 20,
+    marginBottom: 10,
+  },
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sectionLabel: {
+    flex: 1,
+    color: brand.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+  },
+  levelList: {
+    gap: 12,
+    paddingHorizontal: 20,
+  },
+  levelCard: {
+    borderRadius: 22,
+    backgroundColor: brand.card,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  levelCardLocked: {
+    opacity: 0.55,
+  },
+  levelIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cardCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  cardTitle: {
+    color: brand.text,
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  cardSubtitle: {
+    color: brand.textSecondary,
+    fontSize: 13,
+    marginTop: 3,
+    lineHeight: 18,
+  },
+  cardMeta: {
+    color: brand.textMuted,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  lockedText: {
+    color: brand.textSecondary,
+  },
+  pressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.985 }],
+  },
+});
