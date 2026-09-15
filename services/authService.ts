@@ -1,7 +1,9 @@
 import {
   GoogleAuthProvider,
   OAuthProvider,
+  createUserWithEmailAndPassword,
   signInWithCredential,
+  signInWithEmailAndPassword,
   updateProfile,
   UserCredential,
 } from 'firebase/auth';
@@ -10,6 +12,66 @@ import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 import { GOOGLE_IOS_CLIENT_ID, GOOGLE_WEB_CLIENT_ID } from '@/config/oauth';
 import { auth } from '@/config/firebase';
+
+/** Email/password auth is always available via the Firebase JS SDK. */
+export function isEmailAuthAvailable(): boolean {
+  return true;
+}
+
+export async function emailLogin(email: string, password: string): Promise<UserCredential> {
+  const trimmed = email.trim();
+  if (!trimmed) {
+    throw new Error('Please enter your email address.');
+  }
+  if (!password) {
+    throw new Error('Please enter your password.');
+  }
+  return signInWithEmailAndPassword(auth, trimmed, password);
+}
+
+export async function emailRegister(email: string, password: string): Promise<UserCredential> {
+  const trimmed = email.trim();
+  if (!trimmed) {
+    throw new Error('Please enter your email address.');
+  }
+  if (password.length < 6) {
+    throw new Error('Password must be at least 6 characters.');
+  }
+  return createUserWithEmailAndPassword(auth, trimmed, password);
+}
+
+/** Maps Firebase Auth error codes to short user-facing messages. */
+export function getEmailAuthErrorMessage(error: unknown): string {
+  const code =
+    error && typeof error === 'object' && 'code' in error
+      ? String((error as { code?: string }).code)
+      : '';
+  const message = error instanceof Error ? error.message : '';
+
+  switch (code) {
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled.';
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential':
+      return 'Incorrect email or password.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Try signing in.';
+    case 'auth/weak-password':
+      return 'Password must be at least 6 characters.';
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please try again later.';
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.';
+    case 'auth/operation-not-allowed':
+      return 'Email sign-in is not enabled in Firebase. Enable Email/Password in the Firebase console.';
+    default:
+      if (message && !message.startsWith('Firebase:')) return message;
+      return 'Could not sign in. Please try again.';
+  }
+}
 
 type GoogleSignInModule = typeof import('@react-native-google-signin/google-signin');
 

@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
+import { FreeLimitModal } from '@/components/FreeLimitModal';
 import { ThemedText } from '@/components/ThemedText';
 import { SharePromptModal } from '@/components/SharePromptModal';
 import { brand } from '@/constants/matric';
@@ -12,6 +13,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { analytics } from '@/services/analytics';
 import {
+  type AccessProgressView,
+  type AccessReasonCode,
+  canAccessAccountingLevel,
+  getAccountingQuestionsUsedToday,
+  getAccessReason,
+} from '@/services/accessPolicy';
+import {
   AccountingLessonData,
   AccountingQuestion,
   fetchQuestionsByTopicAndLevel,
@@ -19,7 +27,7 @@ import {
 } from '@/services/accounting';
 import {
   getCompletedAccountingQuestionIds,
-  isPremiumAccountingLevel,
+  LearnerProgress,
   loadLocalProgress,
   markAccountingLevelCompleted,
   markAccountingQuestionCompleted,
@@ -27,6 +35,7 @@ import {
   resetAccountingLevelQuestions,
   syncProgressFromCloud,
 } from '@/services/progress';
+import { hasPremiumEntitlement } from '@/services/revenueCat';
 
 import { TapToSelectQuestion } from './components/TapToSelectQuestion';
 import { CategoriseQuestion } from './components/CategoriseQuestion';
@@ -46,48 +55,127 @@ function levelVisual(name: string): { name: ComponentProps<typeof Ionicons>['nam
   return { name: 'flame', color: '#F97316' };
 }
 
+function pickNextAllowedQuestionIndex(params: {
+  questions: Array<{ id: string }>;
+  completedQuestionIds: Set<string>;
+  levelName: string;
+  subtopicName: string;
+  isPro: boolean;
+  progress: AccessProgressView | null;
+  startIndex?: number;
+}): { index: number; reason: AccessReasonCode | null } {
+  const start = Math.max(0, params.startIndex || 0);
+  let firstBlockedReason: AccessReasonCode | null = null;
+
+  for (let index = start; index < params.questions.length; index += 1) {
+    const question = params.questions[index];
+    if (params.completedQuestionIds.has(question.id)) continue;
+
+    const decision = getAccessReason({
+      action: 'complete_accounting',
+      levelName: params.levelName,
+      questionId: question.id,
+      questionIndex: index,
+      subtopicName: params.subtopicName,
+      isPro: params.isPro,
+      progress: params.progress,
+    });
+
+    if (decision.allowed) {
+      return { index, reason: null };
+    }
+
+    if (decision.reason === 'accounting_daily_limit') {
+      return { index: -1, reason: decision.reason };
+    }
+
+    if (firstBlockedReason == null) {
+      firstBlockedReason = decision.reason;
+    }
+  }
+
+  return { index: -1, reason: firstBlockedReason };
+}
+
 export default function AccountingLessonScreen() {
-  const { topicId, topicName, subtopicId, subtopicName, levelId, levelName, accessGranted } =
+  const { topicId, topicName, subtopicId, subtopicName, levelId, levelName } =
     useLocalSearchParams();
   const [lessonData, setLessonData] = useState<AccountingLessonData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [completedQuestionIds, setCompletedQuestionIds] = useState<Set<string>>(new Set());
-  const [isQuestionAnswered, setIsQuestionAnswered] = useState(false);
+  const [, setIsQuestionAnswered] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
+  const [learnerProgress, setLearnerProgress] = useState<LearnerProgress | null>(null);
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitBlocksLesson, setLimitBlocksLesson] = useState(false);
   const { user } = useAuth();
-  const { isPremium, isLoading: isBillingLoading, presentPaywall } = useRevenueCat();
+  const { isPremium, isLoading: isBillingLoading, presentPaywall, refreshCustomerInfo } =
+    useRevenueCat();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const icon = levelVisual(String(levelName || ''));
   const stepperRef = useRef<ScrollView>(null);
-  const requiresPremium = isPremiumAccountingLevel(String(levelName || ''));
-  const grantedFromPaywall = String(accessGranted || '') === '1';
-  const [premiumAllowed, setPremiumAllowed] = useState(!requiresPremium || grantedFromPaywall);
+  const requiresPremium = !canAccessAccountingLevel(String(levelName || ''), false);
+  const [premiumAllowed, setPremiumAllowed] = useState(!requiresPremium);
   const [showShareModal, setShowShareModal] = useState(false);
   const paywallShownRef = useRef(false);
   const sharePromptOpenRef = useRef(false);
 
   useEffect(() => {
-    if (!requiresPremium || isPremium || grantedFromPaywall) {
-      setPremiumAllowed(true);
-      return;
-    }
-    if (isBillingLoading || paywallShownRef.current) return;
-    paywallShownRef.current = true;
+    let cancelled = false;
 
     const gatePremium = async () => {
-      const unlocked = await presentPaywall(user?.uid);
-      if (unlocked) {
+      if (!requiresPremium) {
         setPremiumAllowed(true);
         return;
       }
-      router.back();
+
+      // Always re-check entitlement — never trust route params.
+      const latest = await refreshCustomerInfo();
+      if (cancelled) return;
+
+      const latestPremium = latest ? hasPremiumEntitlement(latest) : isPremium;
+      if (latestPremium) {
+        setPremiumAllowed(true);
+        return;
+      }
+
+      setPremiumAllowed(false);
+      if (isBillingLoading || paywallShownRef.current) return;
+      paywallShownRef.current = true;
+      analytics.track('premium_level_selected', {
+        level: String(levelName || ''),
+        subtopic: String(subtopicName || ''),
+      });
+      try {
+        const unlocked = await presentPaywall('accounting_lesson_gate');
+        if (cancelled) return;
+        if (unlocked) {
+          setPremiumAllowed(true);
+          return;
+        }
+        router.back();
+      } finally {
+        paywallShownRef.current = false;
+      }
     };
 
     void gatePremium();
-  }, [requiresPremium, isPremium, grantedFromPaywall, isBillingLoading, user?.uid]);
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    requiresPremium,
+    isPremium,
+    isBillingLoading,
+    levelName,
+    subtopicName,
+    presentPaywall,
+    refreshCustomerInfo,
+    router,
+  ]);
 
   useEffect(() => {
     if (!premiumAllowed) return;
@@ -99,7 +187,8 @@ export default function AccountingLessonScreen() {
 
         const data = await fetchQuestionsByTopicAndLevel(
           String(subtopicName),
-          String(levelName)
+          String(levelName),
+          { isPro: isPremium }
         );
 
         let progress;
@@ -119,10 +208,48 @@ export default function AccountingLessonScreen() {
           String(levelName || '')
         );
         const completedSet = new Set(completedIds);
-        const firstIncomplete = data.data.findIndex((question) => !completedSet.has(question.id));
+        let accessResult = pickNextAllowedQuestionIndex({
+          questions: data.data,
+          completedQuestionIds: completedSet,
+          levelName: String(levelName || ''),
+          subtopicName: String(subtopicName || ''),
+          isPro: isPremium,
+          progress,
+        });
 
+        if (accessResult.index === -1 && accessResult.reason === 'requires_pro_level' && !isPremium) {
+          const refreshed = await refreshCustomerInfo();
+          const hasProEntitlement = hasPremiumEntitlement(refreshed);
+          if (!hasProEntitlement) {
+            const unlocked = await presentPaywall('accounting_lesson_gate');
+            if (!unlocked) {
+              router.back();
+              return;
+            }
+          }
+          accessResult = pickNextAllowedQuestionIndex({
+            questions: data.data,
+            completedQuestionIds: completedSet,
+            levelName: String(levelName || ''),
+            subtopicName: String(subtopicName || ''),
+            isPro: true,
+            progress,
+          });
+        }
+
+        if (accessResult.reason === 'accounting_daily_limit') {
+          analytics.track('free_limit_reached', { limit_type: 'accounting_level2' });
+          setLimitBlocksLesson(true);
+          setShowLimitModal(true);
+        }
+
+        setLearnerProgress(progress);
         setCompletedQuestionIds(completedSet);
-        setCurrentQuestionIndex(firstIncomplete === -1 ? 0 : firstIncomplete);
+        if (accessResult.index !== -1) {
+          setCurrentQuestionIndex(accessResult.index);
+        } else if (accessResult.reason === 'requires_pro_level') {
+          setCurrentQuestionIndex(0);
+        }
         setLessonData(data);
 
         analytics.track('accounting_lesson_started', {
@@ -133,7 +260,7 @@ export default function AccountingLessonScreen() {
           level_id: levelId,
           level_name: levelName,
           question_count: data.data.length,
-          resumed_at: firstIncomplete === -1 ? 0 : firstIncomplete,
+          resumed_at: accessResult.index === -1 ? 0 : accessResult.index,
         });
       } catch (err) {
         console.error('Error fetching accounting questions:', err);
@@ -144,13 +271,33 @@ export default function AccountingLessonScreen() {
     };
 
     fetchQuestions();
-  }, [premiumAllowed, topicId, topicName, subtopicId, subtopicName, levelId, levelName, user?.uid]);
+  }, [premiumAllowed, topicId, topicName, subtopicId, subtopicName, levelId, levelName, user?.uid, isPremium]);
 
   const handleBackPress = () => {
     router.back();
   };
 
-  const saveQuestionCompletion = async (questionId: string) => {
+  const saveQuestionCompletion = async (
+    questionId: string
+  ): Promise<{ allowed: boolean; progress: LearnerProgress | null }> => {
+    const alreadyCompleted = completedQuestionIds.has(questionId);
+    const decision = getAccessReason({
+      action: 'complete_accounting',
+      levelName: String(levelName || ''),
+      subtopicName: String(subtopicName || ''),
+      questionIndex: currentQuestionIndex,
+      questionId,
+      isPro: isPremium,
+      progress: learnerProgress,
+      alreadyCompleted,
+    });
+
+    if (!decision.allowed) {
+      analytics.track('free_limit_reached', { limit_type: 'accounting_level2' });
+      setShowLimitModal(true);
+      return { allowed: false, progress: learnerProgress };
+    }
+
     setCompletedQuestionIds((prev) => {
       if (prev.has(questionId)) return prev;
       const next = new Set(prev);
@@ -159,36 +306,82 @@ export default function AccountingLessonScreen() {
     });
 
     try {
-      await markAccountingQuestionCompleted({
+      const nextProgress = await markAccountingQuestionCompleted({
         subtopicName: String(subtopicName || ''),
         levelName: String(levelName || ''),
         questionId,
         uid: user?.uid,
       });
+      setLearnerProgress(nextProgress);
+      return { allowed: true, progress: nextProgress };
     } catch (err) {
       console.error('Failed to save accounting question progress:', err);
+      return { allowed: true, progress: learnerProgress };
     }
   };
 
   const handleNextQuestion = async () => {
     const currentQuestion = lessonData?.data[currentQuestionIndex];
     const completed = new Set(completedQuestionIds);
+    let progressAfterCompletion = learnerProgress;
     if (currentQuestion) {
+      const result = await saveQuestionCompletion(currentQuestion.id);
+      if (!result.allowed) return;
+      progressAfterCompletion = result.progress;
       completed.add(currentQuestion.id);
-      await saveQuestionCompletion(currentQuestion.id);
     }
 
-    const nextAfterCurrent = lessonData?.data.findIndex(
-      (question, index) => index > currentQuestionIndex && !completed.has(question.id)
-    ) ?? -1;
-    const nextIncomplete =
-      nextAfterCurrent !== -1
-        ? nextAfterCurrent
-        : lessonData?.data.findIndex((question) => !completed.has(question.id)) ?? -1;
+    const nextAccessResult = lessonData
+      ? pickNextAllowedQuestionIndex({
+          questions: lessonData.data,
+          completedQuestionIds: completed,
+          levelName: String(levelName || ''),
+          subtopicName: String(subtopicName || ''),
+          isPro: isPremium,
+          progress: progressAfterCompletion,
+          startIndex: currentQuestionIndex + 1,
+        })
+      : { index: -1, reason: null };
+    const nextIncomplete = nextAccessResult.index;
 
     if (lessonData && nextIncomplete !== -1) {
       setCurrentQuestionIndex(nextIncomplete);
       setIsQuestionAnswered(false);
+      return;
+    }
+
+    if (nextAccessResult.reason === 'requires_pro_level' && !isPremium) {
+      const unlocked = await presentPaywall('accounting_lesson_gate');
+      if (unlocked) {
+        const upgradedNext = pickNextAllowedQuestionIndex({
+          questions: lessonData?.data || [],
+          completedQuestionIds: completed,
+          levelName: String(levelName || ''),
+          subtopicName: String(subtopicName || ''),
+          isPro: true,
+          progress: progressAfterCompletion,
+          startIndex: currentQuestionIndex + 1,
+        });
+        if (upgradedNext.index !== -1) {
+          setCurrentQuestionIndex(upgradedNext.index);
+          setIsQuestionAnswered(false);
+        } else {
+          setLimitBlocksLesson(false);
+          setShowLimitModal(false);
+          router.back();
+        }
+      } else {
+        setLimitBlocksLesson(false);
+        setShowLimitModal(false);
+        router.back();
+      }
+      return;
+    }
+
+    if (nextAccessResult.reason === 'accounting_daily_limit') {
+      analytics.track('free_limit_reached', { limit_type: 'accounting_level2' });
+      setLimitBlocksLesson(true);
+      setShowLimitModal(true);
       return;
     }
 
@@ -340,7 +533,7 @@ export default function AccountingLessonScreen() {
             id={question.id}
             prompt={question.prompt}
             answer={question.answer || ''}
-            explanation={question.explanation}
+            explanation={isPremium ? question.explanation : undefined}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
             onAttempt={handleAttempt(question.id)}
@@ -353,7 +546,9 @@ export default function AccountingLessonScreen() {
             key={question.id}
             id={question.id}
             context={question.context || ''}
-            steps={question.steps || []}
+            steps={(question.steps || []).map((step) =>
+              isPremium ? step : { ...step, explanation: undefined }
+            )}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
             onAttempt={handleAttempt(question.id)}
@@ -365,7 +560,9 @@ export default function AccountingLessonScreen() {
           <StepFlowQuestion
             key={question.id}
             id={question.id}
-            steps={question.steps || []}
+            steps={(question.steps || []).map((step) =>
+              isPremium ? step : { ...step, explanation: undefined }
+            )}
             onContinue={handleContinue}
             setIsQuestionAnswered={setIsQuestionAnswered}
             onAttempt={handleAttempt(question.id)}
@@ -519,7 +716,7 @@ export default function AccountingLessonScreen() {
     </View>
   );
 
-  if (isLoading) {
+  if (!premiumAllowed || isLoading) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top }]}>
         {renderHeader()}
@@ -609,6 +806,25 @@ export default function AccountingLessonScreen() {
         visible={showShareModal}
         source="lesson"
         onClose={handleShareModalClose}
+      />
+      <FreeLimitModal
+        visible={showLimitModal}
+        limitType="accounting_level2"
+        usedToday={getAccountingQuestionsUsedToday(learnerProgress)}
+        onDismiss={() => {
+          setShowLimitModal(false);
+          if (limitBlocksLesson) router.back();
+        }}
+        onUpgrade={async () => {
+          setShowLimitModal(false);
+          analytics.track('pro_offer_viewed', { source: 'accounting_level2_limit' });
+          const unlocked = await presentPaywall('accounting_level2_limit');
+          if (unlocked) {
+            setLimitBlocksLesson(false);
+          } else if (limitBlocksLesson) {
+            setShowLimitModal(true);
+          }
+        }}
       />
     </View>
   );

@@ -9,7 +9,9 @@
     "android": "expo run:android --port 8088",
     "ios": "expo run:ios --port 8088",
     "web": "expo start --web",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "typecheck": "tsc --noEmit",
+    "test": "jest"
   },
   "expo": {
     "doctor": {

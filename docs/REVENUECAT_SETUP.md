@@ -1,130 +1,130 @@
 # RevenueCat Setup Guide
 
-This guide will help you set up RevenueCat properly for both development and production environments.
+This guide matches the Free vs Pro implementation in the Accounting CPA Quiz app.
+
+## Source of truth
+
+- **Client access** is determined only by RevenueCat customer info.
+- The named entitlement identifier is **`pro`** (`PREMIUM_ENTITLEMENT_ID` in `services/revenueCat.ts`).
+- Do **not** grant Pro from a Firestore `premium` boolean. Clients cannot write entitlement fields (`firestore.rules`).
+- Cached RevenueCat customer info is used for brief offline sessions; entitlement updates arrive via customer-info listeners and app-foreground refresh.
 
 ## Prerequisites
 
-1. **RevenueCat Account**: Sign up at [revenuecat.com](https://revenuecat.com)
-2. **App Store Connect Account**: For iOS in-app purchases
-3. **Google Play Console Account**: For Android in-app purchases
+1. RevenueCat account: [revenuecat.com](https://revenuecat.com)
+2. App Store Connect (iOS)
+3. Google Play Console (Android)
 
-## Configuration Steps
+## Dashboard configuration
 
-### 1. RevenueCat Dashboard Setup
+### 1. Apps
 
-1. **Create a new app** in RevenueCat dashboard
-2. **Add your app's bundle ID**:
-   - iOS: `com.dimpoaccounting`
-   - Android: `com.accountingtutor`
-3. **Configure API Keys**:
-   - Copy the API keys from RevenueCat dashboard
-   - Update them in `config/revenueCat.ts`
+| Platform | Bundle / application ID |
+| --- | --- |
+| iOS | `com.dimpoaccounting` |
+| Android | `com.accountingtutor` |
 
-### 2. Product Configuration
+API keys live in `services/revenueCat.ts` (authoritative). `config/revenueCat.ts` re-exports that module.
 
-#### In RevenueCat Dashboard:
-1. Go to **Products** section
-2. Add the following products:
-   - `premium_monthly` (Non-consumable)
-   - `premium_yearly` (Non-consumable)
-   - `premium_monthly_sub` (Subscription)
-   - `premium_yearly_sub` (Subscription)
+Use the **Dimpo Accounting** RevenueCat project keys only. Do not paste keys from exam-quiz / Dimpo Learning — that makes the paywall show the wrong app name and products.
 
-#### In App Store Connect (iOS):
-1. Go to **My Apps** → **Dimpo Accounting**
-2. Navigate to **Features** → **In-App Purchases**
-3. Create products with the same IDs as in RevenueCat
-4. Set pricing and descriptions
-5. Submit for review
+### 2. Entitlement (required)
 
-#### In Google Play Console (Android):
-1. Go to **Monetization** → **Products** → **In-app products**
-2. Create products with the same IDs as in RevenueCat
-3. Set pricing and descriptions
-4. Activate the products
+1. Open **Entitlements**
+2. Use entitlement identifier: **`pro`**
+3. Attach every Pro subscription product to this entitlement
 
-### 3. Offering Configuration
+The app checks **only** `entitlements.active.pro`. Any other entitlement does not unlock Pro.
 
-1. In RevenueCat dashboard, go to **Offerings**
-2. Create a **Default** offering
-3. Add the products to the offering
-4. Set the offering as **Current**
+### 3. Products
 
-### 4. Development Setup
+Use the subscription products already configured in App Store Connect:
 
-#### iOS Development:
-1. **StoreKit Configuration File**: 
-   - The file `ios/DimpoAccounting/Configuration.storekit` is already created
-   - Open it in Xcode to configure test products
-   - Update product IDs to match your RevenueCat configuration
+| Identifier | Type |
+| --- | --- |
+| `dimpo_accounting_monthly` | Auto-renewing subscription |
+| `dimpo_accounting_annual` | Auto-renewing subscription |
 
-2. **Enable StoreKit Testing**:
-   - In Xcode, go to **Product** → **Scheme** → **Edit Scheme**
-   - Select **Run** → **Options**
-   - Set **StoreKit Configuration** to `Configuration.storekit`
+Optional legacy / non-subscription SKUs may exist in stores, but Pro access still requires the `pro` entitlement to be active.
 
-#### Android Development:
-1. **Test Accounts**: Add test accounts in Google Play Console
-2. **Test Purchases**: Use test accounts to make purchases
+Mirror the same product IDs in:
 
-### 5. Environment Configuration
+- App Store Connect → In-App Purchases / Subscriptions
+- Google Play Console → Monetize → Subscriptions
 
-The app automatically detects the environment:
+**Do not hardcode prices in the React Native UI.** Package prices come from RevenueCat (`product.priceString`).
 
-- **Development (`__DEV__ = true`)**:
-  - Uses mock data if `MOCK_OFFERINGS` is enabled
-  - Provides detailed debug logging
-  - Graceful error handling
+### 4. Offering
 
-- **Production (`__DEV__ = false`)**:
-  - Uses real RevenueCat API
-  - Minimal logging
-  - Strict error handling
+1. Create a **Default** offering
+2. Add the monthly / yearly packages
+3. Mark the offering as **Current**
 
-## Troubleshooting
+### 5. Restore & management
 
-### Common Issues:
+- **Restore Purchases** calls `Purchases.restorePurchases()` and confirms `premium` is active
+- **Manage Subscription** opens `customerInfo.managementURL` when available, otherwise the platform subscriptions page / `showManageSubscriptions` on iOS
 
-1. **"No offerings available" Error**:
-   - Check if products are configured in RevenueCat dashboard
-   - Verify offering is set as "Current"
-   - Ensure API keys are correct
+## Free vs Pro product split
 
-2. **StoreKit Configuration Issues**:
-   - Make sure `Configuration.storekit` is properly configured
-   - Verify product IDs match between StoreKit and RevenueCat
-   - Check that StoreKit testing is enabled in Xcode
+### Free
 
-3. **Android Purchase Issues**:
-   - Verify test accounts are added to Google Play Console
-   - Check that products are activated
-   - Ensure app is signed with correct keystore
+- Level 1: Basics — up to **15 questions per subtopic**
+- Level 2: Core Practice — **3 completed** accounting questions total across the learner lifetime
+- Step-by-step practice — **3 completed** questions per local calendar day
+- Basic correctness feedback
+- Topic mastery, streaks, ordinary progress
+- Cloud progress sync after sign-in
+- Visible preview of locked Levels 3 and 4
 
-### Development Tips:
+### Pro
 
-1. **Use Mock Data**: Enable `MOCK_OFFERINGS` in `config/revenueCat.ts` for development
-2. **Debug Logging**: Check console for detailed RevenueCat logs
-3. **Test on Device**: Always test purchases on a physical device
-4. **Sandbox Testing**: Use sandbox accounts for testing
+- Unlimited Levels 1 and 2
+- Full Level 3 Application and Level 4 Challenge
+- Unlimited step-by-step practice
+- Worked explanations already present in question data
+- Weak-topic insights from attempt statistics
+- Pro badge + Manage Subscription / Restore Purchases
 
-## Testing Checklist
+Practice daily usage is stored in `progress.dailyUsage` and merged with cloud progress. Level 2 uses lifetime completed-question history instead of a daily allowance.
+
+## Anonymous purchases
+
+Sign-in is **not** required to purchase. RevenueCat anonymous IDs are preserved until the user signs in, then `Purchases.logIn(uid)` aliases the accounts.
+
+## Server-side protection (required to secure raw premium content)
+
+The app currently enforces the Free/Pro split in its UI, but the `accounting` collection remains publicly readable so signed-out learners can use the curriculum. UI gating prevents ordinary access; it does not prevent someone from downloading Level 3-4 documents directly from Firestore.
+
+To enforce premium access at the data layer without breaking anonymous purchases, add a trusted backend that validates RevenueCat access and returns premium lesson content. If signed-in-only premium access is acceptable, a RevenueCat webhook can instead maintain a server-owned entitlement mirror used by Firestore rules:
+
+1. Configure a **RevenueCat webhook** to a trusted backend
+2. Verify the webhook secret server-side
+3. Update only `users/{uid}.premium` / `premiumUpdatedAt` from that backend
+
+The mobile client must never write those fields. Do not tighten the current `accounting` read rule until the app query model and anonymous-purchase flow have been migrated, or free and anonymous paying learners will lose access.
+
+## Development tips
+
+1. Prefer a physical device / StoreKit testing for purchase flows
+2. Confirm the Default offering is **Current** and products are attached to entitlement `pro`
+3. If the app logs `No offerings available`, RevenueCat has no Current offering (or store products failed to load) — fix the dashboard before debugging app code
+4. Watch console logs for RevenueCat initialization errors
+
+## Testing checklist
 
 - [ ] RevenueCat initializes without errors
-- [ ] Offerings are loaded successfully
-- [ ] Purchase flow works end-to-end
-- [ ] Restore purchases works
-- [ ] User identification works
-- [ ] Paywall displays correctly
-
-## Production Deployment
-
-1. **Update API Keys**: Ensure production API keys are used
-2. **Disable Mock Data**: Set `MOCK_OFFERINGS` to `false`
-3. **Test with Real Accounts**: Use real App Store/Google Play accounts
-4. **Monitor Analytics**: Check RevenueCat dashboard for purchase events
+- [ ] Offerings load with localized prices
+- [ ] Purchase activates `pro` entitlement
+- [ ] Restore Purchases works for PURCHASED and RESTORED outcomes
+- [ ] Expired / cancelled / refunded subscriptions remove Pro when entitlement is inactive
+- [ ] Levels 3–4 stay locked for free users (no `accessGranted` URL bypass)
+- [ ] Free Level 1 shows up to 15 questions per subtopic
+- [ ] Free Level 2 locks after 3 completed questions total and does not reset daily
+- [ ] Free practice daily limit resets at local midnight
+- [ ] Profile shows Upgrade / Restore for free users and Manage / Restore for Pro
 
 ## Support
 
 - [RevenueCat Documentation](https://docs.revenuecat.com/)
 - [RevenueCat Community](https://community.revenuecat.com/)
-- [StoreKit Testing Guide](https://developer.apple.com/documentation/storekit/in-app_purchase/testing_in-app_purchases_with_xcode) 

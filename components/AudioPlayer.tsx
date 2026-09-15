@@ -215,8 +215,6 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(({ audio
                             source={{ uri: imageUrl }}
                             style={styles.image}
                             resizeMode="cover"
-                            onLoadStart={() => //console.log('[AudioPlayer] Image loading started:', imageUrl)}
-                            onLoad={() => //console.log('[AudioPlayer] Image loaded successfully:', imageUrl)}
                             onError={(error) => console.error('[AudioPlayer] Image loading error:', error.nativeEvent.error)}
                         />
                     </View>
@@ -401,4 +399,4 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginTop: -2,
     },
-}); 
+});

@@ -33,20 +33,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    // Attempt to restore from SecureStore first
-    async function restoreFromSecureStore() {
-      try {
-        const storedAuth = await SecureStore.getItemAsync('auth');
-        if (storedAuth && !user && isMounted) {
-          const { user: storedUser } = JSON.parse(storedAuth);
-          setUser(storedUser);
-        }
-      } catch (error) {
-        console.error('Error restoring auth from SecureStore:', error);
-      }
-    }
-
-    // Then set up Firebase auth listener
+    // Only trust Firebase Auth. Restoring SecureStore before onAuthStateChanged
+    // created a "ghost" logged-in user with no ID token → Firestore permission-denied.
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!isMounted) return;
 
@@ -57,7 +45,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           displayName: firebaseUser.displayName,
           photoURL: firebaseUser.photoURL,
         };
-        // Store in SecureStore as backup
         await SecureStore.setItemAsync('auth', JSON.stringify({ user: userData }));
         setUser(userData);
         setAnalyticsUserId(firebaseUser.uid);
@@ -68,8 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setIsLoading(false);
     });
-
-    restoreFromSecureStore();
 
     return () => {
       isMounted = false;

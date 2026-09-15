@@ -9,13 +9,18 @@ import { useFonts } from 'expo-font';
 import * as Notifications from 'expo-notifications';
 import { router, SplashScreen, Stack } from 'expo-router';
 import React, { useEffect, useRef } from 'react';
-import { LogBox } from 'react-native';
+import { LogBox, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import Toast, { BaseToast, ErrorToast } from 'react-native-toast-message';
 import AuthLayout from './_auth';
 import { SoundProvider } from './contexts/SoundContext';
 import { styles } from '@/styles/global';
+
+if (Platform.OS !== 'web') {
+  // Ensure the native Firebase default app exists before runtime analytics calls.
+  require('@react-native-firebase/app');
+}
 
 // Suppress shadow warnings
 LogBox.ignoreLogs([
@@ -216,4 +221,3 @@ export default function RootLayout() {
     </GestureHandlerRootView>
   );
 }
-

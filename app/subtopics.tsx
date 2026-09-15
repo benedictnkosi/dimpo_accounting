@@ -12,9 +12,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import { analytics } from '@/services/analytics';
 import {
+  canAccessAccountingLevel,
+  getAccountingLevelNumber,
+  getAccessReason,
+} from '@/services/accessPolicy';
+import {
   getAccountingLevelMastery,
   isAccountingLevelUnlocked,
-  isPremiumAccountingLevel,
   loadLocalProgress,
   syncProgressFromCloud,
   type LearnerProgress,
@@ -156,7 +160,7 @@ export default function SubtopicsScreen() {
     }, [refreshProgress])
   );
 
-  const openLesson = (subtopic: Subtopic, level: Level, grantedFromPaywall = false) => {
+  const openLesson = (subtopic: Subtopic, level: Level) => {
     analytics.track('accounting_level_selected', {
       topic_id: topicId,
       topic_name: topicName,
@@ -175,7 +179,6 @@ export default function SubtopicsScreen() {
         subtopicName: subtopic.name,
         levelId: level.id,
         levelName: level.name,
-        ...(grantedFromPaywall ? { accessGranted: '1' } : {}),
       },
     });
   };
@@ -191,18 +194,16 @@ export default function SubtopicsScreen() {
     if (premiumLocked) {
       if (paywallOpenRef.current) return;
       paywallOpenRef.current = true;
-      analytics.track('accounting_premium_level_locked', {
+      analytics.track('premium_level_selected', {
+        level: level.name,
+        subtopic: subtopic.name,
         topic_id: topicId,
-        topic_name: topicName,
-        subtopic_id: subtopic.id,
-        subtopic_name: subtopic.name,
-        level_id: level.id,
-        level_name: level.name,
       });
+      analytics.track('pro_offer_viewed', { source: 'subtopics_locked_level' });
       try {
-        const unlockedPremium = await presentPaywall(user?.uid);
-        if (!unlockedPremium) return;
-        openLesson(subtopic, level, true);
+        const unlockedPremium = await presentPaywall('subtopics_locked_level');
+        if (!unlockedPremium || !canAccessAccountingLevel(level.name, true)) return;
+        openLesson(subtopic, level);
       } finally {
         paywallOpenRef.current = false;
       }
@@ -277,67 +278,100 @@ export default function SubtopicsScreen() {
                       subtopic.levels,
                       levelIndex
                     );
-                    const premiumLocked = isPremiumAccountingLevel(level.name) && !isPremium;
+                    const levelNumber = getAccountingLevelNumber(level.name);
+                    const premiumLevel = levelNumber === 3 || levelNumber === 4;
+                    const premiumLocked = !canAccessAccountingLevel(level.name, isPremium);
                     const mastery = unlocked
                       ? getAccountingLevelMastery(progress, subtopic.name, level.name)
                       : null;
-                    const meta = unlocked
-                      ? mastery && mastery.attempted > 0
-                        ? `${mastery.correct} correct · ${mastery.incorrect} incorrect`
-                        : details.useCase
-                      : 'Complete the previous level to unlock';
+                    const accessHint = premiumLocked
+                      ? getAccessReason({
+                          action: 'access_level',
+                          levelName: level.name,
+                          isPro: false,
+                        }).message
+                        : levelNumber === 1
+                        ? 'Level 1 shows first 15 questions for free users.'
+                        : levelNumber === 2
+                        ? 'Core practice is free for the first 3 questions.'
+                        : null;
+                    const meta = !unlocked
+                      ? 'Complete the previous level to unlock'
+                      : premiumLocked
+                        ? 'Pro · Full exam preparation'
+                        : mastery && mastery.attempted > 0
+                          ? `${mastery.correct} correct · ${mastery.incorrect} incorrect`
+                          : details.useCase;
+                    const canPress = unlocked;
                     return (
                       <Pressable
                         key={level.id}
-                        disabled={!unlocked}
+                        disabled={!canPress}
                         onPress={() => handleLevelPress(subtopic, level, unlocked, premiumLocked)}
                         style={({ pressed }) => [
                           styles.levelCard,
-                          !unlocked && styles.levelCardLocked,
-                          pressed && unlocked && styles.pressed,
+                          (!unlocked || premiumLocked) && styles.levelCardLocked,
+                          pressed && canPress && styles.pressed,
                         ]}
                         accessibilityRole="button"
                         accessibilityLabel={
-                          unlocked
-                            ? mastery && mastery.attempted > 0
-                              ? `${level.name}, ${mastery.mastery} percent mastery`
-                              : level.name
-                            : `${level.name}, locked`
+                          !unlocked
+                            ? `${level.name}, locked`
+                            : premiumLocked
+                              ? `${level.name}, Pro required`
+                              : mastery && mastery.attempted > 0
+                                ? `${level.name}, ${mastery.mastery} percent mastery`
+                                : level.name
                         }
-                        accessibilityState={{ disabled: !unlocked }}
+                        accessibilityState={{ disabled: !canPress }}
                       >
                         <View style={[styles.levelIcon, { backgroundColor: visual.color }]}>
                           <Ionicons
-                            name={unlocked ? visual.name : 'lock-closed'}
+                            name={!unlocked || premiumLocked ? 'lock-closed' : visual.name}
                             size={18}
                             color="#FFFFFF"
                           />
                         </View>
                         <View style={styles.cardCopy}>
-                          <ThemedText
-                            style={[styles.cardTitle, !unlocked && styles.lockedText]}
-                            numberOfLines={1}
-                          >
-                            {level.name}
-                          </ThemedText>
+                          <View style={styles.titleRow}>
+                            <ThemedText
+                              style={[
+                                styles.cardTitle,
+                                (!unlocked || premiumLocked) && styles.lockedText,
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {level.name}
+                            </ThemedText>
+                            {premiumLevel ? (
+                              <View style={styles.proPill} accessibilityLabel="Pro">
+                                <ThemedText style={styles.proPillText}>Pro</ThemedText>
+                              </View>
+                            ) : null}
+                          </View>
                           {!!details.goal && (
                             <ThemedText style={styles.cardSubtitle} numberOfLines={2}>
                               {details.goal}
                             </ThemedText>
                           )}
                           {!!meta && (
-                            <ThemedText style={styles.cardMeta} numberOfLines={1}>
+                            <ThemedText style={styles.cardMeta} numberOfLines={2}>
                               {meta}
                             </ThemedText>
                           )}
+                          {!!accessHint && unlocked ? (
+                            <ThemedText style={styles.cardMeta} numberOfLines={2}>
+                              {accessHint}
+                            </ThemedText>
+                          ) : null}
                         </View>
-                        {unlocked ? (
+                        {unlocked && !premiumLocked ? (
                           <MasteryRing percent={mastery?.mastery ?? 0} size={44} />
                         ) : null}
                         <Ionicons
-                          name={unlocked ? 'chevron-forward' : 'lock-closed'}
+                          name={unlocked && !premiumLocked ? 'chevron-forward' : 'lock-closed'}
                           size={18}
-                          color={unlocked ? brand.text : brand.textMuted}
+                          color={unlocked && !premiumLocked ? brand.text : brand.textMuted}
                         />
                       </Pressable>
                     );
@@ -452,10 +486,28 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   cardTitle: {
+    flexShrink: 1,
     color: brand.text,
     fontSize: 16,
     fontWeight: '800',
+  },
+  proPill: {
+    backgroundColor: brand.amber,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  proPillText: {
+    color: '#0B1220',
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   cardSubtitle: {
     color: brand.textSecondary,

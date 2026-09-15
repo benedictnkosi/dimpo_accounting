@@ -1,10 +1,11 @@
 import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
-import { getAuth, setPersistence } from 'firebase/auth';
+import { initializeAuth, getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getReactNativePersistence } from 'firebase/auth/react-native';
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 
 const extra = Constants.expoConfig?.extra ?? {};
 
@@ -25,11 +26,23 @@ if (!getApps().length) {
   app = getApps()[0];
 }
 
-const auth = getAuth(app);
-setPersistence(auth, getReactNativePersistence(AsyncStorage)).catch((error) => {
-  console.error('Error setting auth persistence:', error);
-});
+function createAuth(firebaseApp: FirebaseApp) {
+  // React Native needs AsyncStorage persistence at initializeAuth time.
+  // getAuth() + setPersistence() races and often leaves auth.currentUser null.
+  if (Platform.OS === 'web') {
+    return getAuth(firebaseApp);
+  }
+  try {
+    return initializeAuth(firebaseApp, {
+      persistence: getReactNativePersistence(AsyncStorage),
+    });
+  } catch {
+    // Already initialized (Fast Refresh / duplicate import).
+    return getAuth(firebaseApp);
+  }
+}
 
+const auth = createAuth(app);
 const db = getFirestore(app);
 export const storage = getStorage(app);
 

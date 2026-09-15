@@ -1,5 +1,4 @@
 import { Platform } from 'react-native';
-import rnfbAnalytics, { firebase as rnfbFirebase } from '@react-native-firebase/analytics';
 
 export type AnalyticsParamValue = string | number | boolean;
 export type AnalyticsParams = Record<string, AnalyticsParamValue | null | undefined>;
@@ -37,16 +36,56 @@ function sanitizeParams(params?: Record<string, unknown>): GaParams | undefined 
   return Object.keys(properties).length ? properties : undefined;
 }
 
+let nativeAppReady: boolean | null = null;
+
+function ensureNativeFirebaseApp(): boolean {
+  if (Platform.OS === 'web') return false;
+  if (nativeAppReady != null) return nativeAppReady;
+  try {
+    // Side-effect import registers the native default app from GoogleService-Info.plist.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require('@react-native-firebase/app');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { getApp } = require('@react-native-firebase/app') as {
+      getApp: () => unknown;
+    };
+    getApp();
+    nativeAppReady = true;
+  } catch (error) {
+    nativeAppReady = false;
+    console.warn('[GA] Native Firebase app not ready:', error);
+  }
+  return nativeAppReady;
+}
+
 function resolveAnalyticsFactory(): (() => NativeAnalytics) | null {
-  const candidates = [
-    rnfbAnalytics,
-    (rnfbAnalytics as { default?: unknown })?.default,
-    rnfbFirebase?.analytics,
-  ];
-  for (const candidate of candidates) {
-    if (typeof candidate === 'function') {
-      return candidate as () => NativeAnalytics;
+  if (!ensureNativeFirebaseApp()) return null;
+  try {
+    // Prefer modular API (RN Firebase v22 migration path).
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const analyticsMod = require('@react-native-firebase/analytics') as {
+      getAnalytics?: (app?: unknown) => NativeAnalytics;
+      default?: (() => NativeAnalytics) | { default?: () => NativeAnalytics };
+      firebase?: { analytics?: () => NativeAnalytics };
+    };
+    if (typeof analyticsMod.getAnalytics === 'function') {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { getApp } = require('@react-native-firebase/app') as { getApp: () => unknown };
+      const app = getApp();
+      return () => analyticsMod.getAnalytics!(app);
     }
+    const candidates = [
+      analyticsMod.default,
+      (analyticsMod.default as { default?: unknown } | undefined)?.default,
+      analyticsMod.firebase?.analytics,
+    ];
+    for (const candidate of candidates) {
+      if (typeof candidate === 'function') {
+        return candidate as () => NativeAnalytics;
+      }
+    }
+  } catch (error) {
+    console.warn('[GA] Native analytics module unavailable:', error);
   }
   return null;
 }

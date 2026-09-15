@@ -12,15 +12,22 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { ThemedText } from '@/components/ThemedText';
+import { FreeLimitModal } from '@/components/FreeLimitModal';
 import { HomeFooter, HomeHeader } from '@/components/home/HomeChrome';
 import { brand, SHARE_MESSAGE, SHARE_URL } from '@/constants/matric';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import {
   getPracticeTopicRows,
   getPracticedTotal,
   pickPracticeQuestion,
   PracticeTopicRow,
 } from '@/services/practice';
+import {
+  canStartPracticeQuestion,
+  getPracticeQuestionsRemainingToday,
+  getPracticeQuestionsUsedToday,
+} from '@/services/accessPolicy';
 import {
   LearnerProgress,
   loadLocalProgress,
@@ -33,6 +40,7 @@ import { shareContent } from '@/utils/share';
 export default function PracticeHubScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { isPremium, presentPaywall } = useRevenueCat();
   const [progress, setProgress] = useState<LearnerProgress | null>(null);
   const [topics, setTopics] = useState<PracticeTopicRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +48,7 @@ export default function PracticeHubScreen() {
   const [banner, setBanner] = useState<string | null>(null);
   const [launchingTopic, setLaunchingTopic] = useState<string | null>(null);
   const [showResetModal, setShowResetModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [shareLabel, setShareLabel] = useState('Share');
 
   const firstName = useMemo(() => {
@@ -49,6 +58,9 @@ export default function PracticeHubScreen() {
   }, [user?.displayName, user?.email]);
 
   const practicedTotal = progress ? getPracticedTotal(progress) : 0;
+  const practiceRemaining = progress
+    ? getPracticeQuestionsRemainingToday(progress, isPremium)
+    : null;
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -91,6 +103,16 @@ export default function PracticeHubScreen() {
   const handleTopicPress = useCallback(
     async (topic: PracticeTopicRow) => {
       if (launchingTopic || topic.isDone || !progress) return;
+
+      if (
+        !isPremium &&
+        getPracticeQuestionsRemainingToday(progress, false) <= 0
+      ) {
+        logAnalyticsEvent('free_limit_reached', { limit_type: 'practice' });
+        setShowLimitModal(true);
+        return;
+      }
+
       setLaunchingTopic(topic.topicName);
       setBanner(null);
       logAnalyticsEvent('practice_topic_select', {
@@ -112,6 +134,18 @@ export default function PracticeHubScreen() {
           return;
         }
 
+        if (
+          !canStartPracticeQuestion({
+            questionId: result.question.id,
+            isPro: isPremium,
+            progress,
+          })
+        ) {
+          logAnalyticsEvent('free_limit_reached', { limit_type: 'practice' });
+          setShowLimitModal(true);
+          return;
+        }
+
         router.push({
           pathname: '/practice-walkthrough',
           params: {
@@ -127,7 +161,7 @@ export default function PracticeHubScreen() {
         setLaunchingTopic(null);
       }
     },
-    [launchingTopic, progress]
+    [isPremium, launchingTopic, progress]
   );
 
   const handleReset = useCallback(async () => {
@@ -173,6 +207,9 @@ export default function PracticeHubScreen() {
         {!isLoading && !loadError && (
           <ThemedText style={styles.progressLine}>
             {practicedTotal} question{practicedTotal === 1 ? '' : 's'} practiced
+            {!isPremium && practiceRemaining != null
+              ? ` · ${Number.isFinite(practiceRemaining) ? practiceRemaining : 0} free left today`
+              : ''}
           </ThemedText>
         )}
 
@@ -279,6 +316,18 @@ export default function PracticeHubScreen() {
           shareLabel={shareLabel}
         />
       </View>
+
+      <FreeLimitModal
+        visible={showLimitModal}
+        limitType="practice"
+        usedToday={getPracticeQuestionsUsedToday(progress)}
+        onDismiss={() => setShowLimitModal(false)}
+        onUpgrade={async () => {
+          setShowLimitModal(false);
+          logAnalyticsEvent('pro_offer_viewed', { source: 'practice_daily_limit' });
+          await presentPaywall('practice_daily_limit');
+        }}
+      />
 
       <Modal visible={showResetModal} transparent animationType="fade">
         <View style={styles.modalBackdrop}>

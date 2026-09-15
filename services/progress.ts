@@ -1,6 +1,10 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/config/firebase';
+import { auth, db } from '@/config/firebase';
+import {
+  getLocalTodayKey,
+  isPremiumAccountingLevel as isPremiumLevelFromPolicy,
+} from '@/services/accessPolicy';
 
 const PROGRESS_KEY = 'matricUnlocked.progress';
 export const STREAK_DAILY_CORRECT_THRESHOLD = 3;
@@ -24,6 +28,22 @@ export interface DailyProgress {
   date: string;
   count: number;
   correct: number;
+}
+
+/** Free-tier daily completions (local calendar day). Synced with cloud progress. */
+export interface DailyUsageProgress {
+  date: string;
+  accountingQuestionIds: Record<string, true>;
+  practiceQuestionIds: Record<string, true>;
+}
+
+export interface WeakTopicInsight {
+  key: string;
+  label: string;
+  mastery: number;
+  attempted: number;
+  correct: number;
+  incorrect: number;
 }
 
 export interface StreakProgress {
@@ -55,6 +75,7 @@ export interface LearnerProgress {
   accountingQuestionsCompleted: Record<string, Record<string, string>>;
   accountingAttemptStats: AccountingAttemptStats;
   daily: DailyProgress;
+  dailyUsage: DailyUsageProgress;
   streak: StreakProgress;
 }
 
@@ -70,11 +91,19 @@ export interface SubjectProgressView {
 }
 
 function todayKey(): string {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return getLocalTodayKey();
+}
+
+function normalizeDailyUsage(usage?: Partial<DailyUsageProgress> | null): DailyUsageProgress {
+  const today = todayKey();
+  if (!usage || usage.date !== today) {
+    return { date: today, accountingQuestionIds: {}, practiceQuestionIds: {} };
+  }
+  return {
+    date: today,
+    accountingQuestionIds: { ...(usage.accountingQuestionIds || {}) },
+    practiceQuestionIds: { ...(usage.practiceQuestionIds || {}) },
+  };
 }
 
 function shiftDateKey(dateKey: string, days: number): string {
@@ -112,6 +141,7 @@ export function createEmptyProgress(): LearnerProgress {
     accountingQuestionsCompleted: {},
     accountingAttemptStats: {},
     daily: { date: todayKey(), count: 0, correct: 0 },
+    dailyUsage: { date: todayKey(), accountingQuestionIds: {}, practiceQuestionIds: {} },
     streak: { count: 0, lastDate: '' },
   };
 }
@@ -174,6 +204,7 @@ export async function loadLocalProgress(): Promise<LearnerProgress> {
       accountingQuestionsCompleted: parsed.accountingQuestionsCompleted || {},
       accountingAttemptStats: parsed.accountingAttemptStats || {},
       daily: normalizeDaily(parsed.daily),
+      dailyUsage: normalizeDailyUsage(parsed.dailyUsage),
       streak: normalizeStreak(parsed.streak),
     };
   } catch (error) {
@@ -415,6 +446,8 @@ export function mergeProgress(local: LearnerProgress, cloud: Partial<LearnerProg
     correct: Math.max(localDailyCorrect, cloudDailyCorrect),
   };
 
+  merged.dailyUsage = mergeDailyUsage(local.dailyUsage, cloud.dailyUsage, today);
+
   merged.streak = mergeStreak(
     normalizeStreak(local.streak),
     normalizeStreak(cloud.streak)
@@ -422,6 +455,26 @@ export function mergeProgress(local: LearnerProgress, cloud: Partial<LearnerProg
   applyStreakAfterCorrect(merged);
 
   return merged;
+}
+
+export function mergeDailyUsage(
+  local: Partial<DailyUsageProgress> | undefined,
+  cloud: Partial<DailyUsageProgress> | undefined,
+  today: string = todayKey()
+): DailyUsageProgress {
+  const localToday = local?.date === today ? local : null;
+  const cloudToday = cloud?.date === today ? cloud : null;
+  return {
+    date: today,
+    accountingQuestionIds: {
+      ...(cloudToday?.accountingQuestionIds || {}),
+      ...(localToday?.accountingQuestionIds || {}),
+    },
+    practiceQuestionIds: {
+      ...(cloudToday?.practiceQuestionIds || {}),
+      ...(localToday?.practiceQuestionIds || {}),
+    },
+  };
 }
 
 function mergeAttemptStats(
@@ -477,6 +530,7 @@ export async function ensureUserProfile(params: {
   name?: string | null;
   photoURL?: string | null;
 }): Promise<void> {
+  if (!canSyncToCloud(params.uid)) return;
   const ref = doc(db, 'users', params.uid);
   const snap = await getDoc(ref);
 
@@ -485,7 +539,6 @@ export async function ensureUserProfile(params: {
       email: params.email || '',
       name: params.name || '',
       photoURL: params.photoURL || '',
-      premium: false,
       createdAt: serverTimestamp(),
     });
     return;
@@ -502,20 +555,15 @@ export async function ensureUserProfile(params: {
   );
 }
 
-export async function setUserPremium(uid: string, premium: boolean): Promise<void> {
-  if (!uid) return;
-  await setDoc(
-    doc(db, 'users', uid),
-    {
-      premium,
-      premiumUpdatedAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
+function canSyncToCloud(uid: string): boolean {
+  return Boolean(uid && auth.currentUser?.uid === uid);
 }
 
 export async function syncProgressFromCloud(uid: string): Promise<LearnerProgress> {
   const local = await loadLocalProgress();
+  if (!canSyncToCloud(uid)) {
+    return local;
+  }
   const snap = await getDoc(doc(db, 'users', uid));
   const cloudProgress = snap.exists() ? (snap.data()?.progress as LearnerProgress | undefined) : undefined;
   const merged = mergeProgress(local, cloudProgress);
@@ -532,6 +580,9 @@ export async function syncProgressFromCloud(uid: string): Promise<LearnerProgres
 }
 
 export async function pushProgressToCloud(uid: string, progress: LearnerProgress): Promise<void> {
+  if (!canSyncToCloud(uid)) {
+    return;
+  }
   await setDoc(
     doc(db, 'users', uid),
     {
@@ -603,20 +654,22 @@ export async function markPracticeCompleted(params: {
   topicName: string;
   uid?: string | null;
 }): Promise<LearnerProgress> {
-  const progress = await loadLocalProgress();
-  progress.practiceCompleted = {
-    ...(progress.practiceCompleted || {}),
-    [params.questionId]: params.topicName,
-  };
-  await saveLocalProgress(progress);
-  if (params.uid) {
-    try {
-      await pushProgressToCloud(params.uid, progress);
-    } catch (error) {
-      console.error('Failed to sync practice progress:', error);
+  return mutateProgress((progress) => {
+    const alreadyDone = Boolean(progress.practiceCompleted?.[params.questionId]);
+    progress.practiceCompleted = {
+      ...(progress.practiceCompleted || {}),
+      [params.questionId]: params.topicName,
+    };
+
+    if (!alreadyDone) {
+      const today = todayKey();
+      const usage = normalizeDailyUsage(progress.dailyUsage);
+      usage.practiceQuestionIds[params.questionId] = true;
+      progress.dailyUsage = usage;
+      // Keep date aligned even if normalize already did.
+      progress.dailyUsage.date = today;
     }
-  }
-  return progress;
+  }, params.uid);
 }
 
 export async function resetPracticeCompleted(uid?: string | null): Promise<LearnerProgress> {
@@ -645,18 +698,23 @@ export function isAccountingLevelComplete(
   return !!progress?.accountingLevelsCompleted?.[accountingLevelKey(subtopicName, levelName)];
 }
 
+/** Keep false in shipped builds; tests can exercise progression with explicit progress fixtures. */
+export const UNLOCK_ALL_LEVELS_FOR_TESTING = true;
+
 export function isAccountingLevelUnlocked(
   progress: LearnerProgress | null | undefined,
   subtopicName: string,
   levels: { name: string }[],
   index: number
 ): boolean {
+  if (UNLOCK_ALL_LEVELS_FOR_TESTING) return true;
   if (index <= 0) return true;
   return isAccountingLevelComplete(progress, subtopicName, levels[index - 1].name);
 }
 
 export function isPremiumAccountingLevel(levelName: string): boolean {
-  return levelName.includes('Level 3') || levelName.includes('Level 4');
+  if (UNLOCK_ALL_LEVELS_FOR_TESTING) return false;
+  return isPremiumLevelFromPolicy(levelName);
 }
 
 export async function markAccountingLevelCompleted(params: {
@@ -794,6 +852,8 @@ export async function markAccountingQuestionCompleted(params: {
   return mutateProgress((progress) => {
     const key = accountingLevelKey(params.subtopicName, params.levelName);
     const existing = progress.accountingQuestionsCompleted[key] || {};
+    const alreadyDone = Boolean(existing[params.questionId]);
+
     progress.accountingQuestionsCompleted = {
       ...(progress.accountingQuestionsCompleted || {}),
       [key]: {
@@ -804,3 +864,45 @@ export async function markAccountingQuestionCompleted(params: {
   }, params.uid);
 }
 
+/**
+ * Rank attempted accounting topics/subtopics by lowest mastery.
+ * Returns up to `limit` insights; empty when there is insufficient attempt data.
+ */
+export function getWeakTopicInsights(
+  progress: LearnerProgress | null | undefined,
+  limit = 3
+): WeakTopicInsight[] {
+  const bySubtopic = new Map<string, { correct: number; incorrect: number }>();
+
+  Object.entries(progress?.accountingAttemptStats || {}).forEach(([levelKey, questions]) => {
+    const subtopicName = levelKey.split('::')[0]?.trim();
+    if (!subtopicName) return;
+    const totals = summarizeAttemptStats(questions);
+    if (totals.attempted <= 0) return;
+    const current = bySubtopic.get(subtopicName) || { correct: 0, incorrect: 0 };
+    current.correct += totals.correct;
+    current.incorrect += totals.incorrect;
+    bySubtopic.set(subtopicName, current);
+  });
+
+  const insights: WeakTopicInsight[] = [];
+  bySubtopic.forEach((counts, label) => {
+    const attempted = counts.correct + counts.incorrect;
+    if (attempted <= 0) return;
+    insights.push({
+      key: label,
+      label,
+      attempted,
+      correct: counts.correct,
+      incorrect: counts.incorrect,
+      mastery: Math.round((counts.correct / attempted) * 100),
+    });
+  });
+
+  return insights
+    .sort((a, b) => {
+      if (a.mastery !== b.mastery) return a.mastery - b.mastery;
+      return b.attempted - a.attempted;
+    })
+    .slice(0, Math.max(0, limit));
+}

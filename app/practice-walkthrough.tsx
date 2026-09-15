@@ -12,11 +12,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ThemedText } from '@/components/ThemedText';
+import { FreeLimitModal } from '@/components/FreeLimitModal';
 import { MathText } from '@/components/math/MathText';
 import { ExplanationModal } from '@/components/ExplanationModal';
 import { SharePromptModal } from '@/components/SharePromptModal';
 import { brand, SHARE_URL } from '@/constants/matric';
 import { useAuth } from '@/contexts/AuthContext';
+import { useRevenueCat } from '@/contexts/RevenueCatContext';
 import {
   getPracticedTotal,
   loadPracticeQuestion,
@@ -24,6 +26,10 @@ import {
   PracticeStep,
   prepareStepOptions,
 } from '@/services/practice';
+import {
+  canStartPracticeQuestion,
+  getPracticeQuestionsUsedToday,
+} from '@/services/accessPolicy';
 import {
   LearnerProgress,
   loadLocalProgress,
@@ -40,6 +46,7 @@ const OPTION_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 export default function PracticeWalkthroughScreen() {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
+  const { isPremium, presentPaywall } = useRevenueCat();
   const params = useLocalSearchParams<{
     questionId?: string;
     topic?: string;
@@ -67,6 +74,7 @@ export default function PracticeWalkthroughScreen() {
   const [sessionExplanation, setSessionExplanation] = useState('');
   const [showPreviousAnswers, setShowPreviousAnswers] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [completedSteps, setCompletedSteps] = useState<
     { prompt: string; answer: string; correct: boolean }[]
   >([]);
@@ -221,6 +229,19 @@ export default function PracticeWalkthroughScreen() {
           return;
         }
 
+        if (
+          !canStartPracticeQuestion({
+            questionId: result.question.id,
+            isPro: isPremium,
+            progress: fromProgress,
+          })
+        ) {
+          logAnalyticsEvent('free_limit_reached', { limit_type: 'practice' });
+          setShowLimitModal(true);
+          if (options?.completeOnFail) setIsComplete(true);
+          return;
+        }
+
         router.replace({
           pathname: '/practice-walkthrough',
           params: {
@@ -237,7 +258,7 @@ export default function PracticeWalkthroughScreen() {
         setIsSkipping(false);
       }
     },
-    [fromHub, isSkipping, question?.id, topicName]
+    [fromHub, isPremium, isSkipping, question?.id, topicName]
   );
 
   const handleNextStep = useCallback(async () => {
@@ -484,10 +505,20 @@ export default function PracticeWalkthroughScreen() {
           <ThemedText style={styles.headerBackText}>{backLabel}</ThemedText>
         </Pressable>
         <View style={styles.headerActions}>
-          <Pressable onPress={() => setShowExplain(true)} style={styles.headerAction}>
+          <Pressable
+            onPress={() => {
+              if (!isPremium) {
+                logAnalyticsEvent('pro_offer_viewed', { source: 'practice_explanation' });
+                void presentPaywall('practice_explanation');
+                return;
+              }
+              setShowExplain(true);
+            }}
+            style={styles.headerAction}
+          >
             <Ionicons name="sparkles" size={16} color={brand.primarySoft} />
             <ThemedText style={styles.headerActionText}>
-              {explanation ? 'Explanation' : 'Explain'}
+              {isPremium ? (explanation ? 'Explanation' : 'Explain') : 'Explain (Pro)'}
             </ThemedText>
           </Pressable>
           <Pressable onPress={handleShare} style={styles.headerAction}>
@@ -680,19 +711,30 @@ export default function PracticeWalkthroughScreen() {
         {isChecked && (
           <View style={[styles.teachPanel, isCorrect ? styles.teachCorrect : styles.teachIncorrect]}>
             <ThemedText style={styles.teachHeading}>
-              {isCorrect ? 'Correct!' : "Not quite — here's how it works:"}
+              {isCorrect ? 'Correct!' : isPremium ? "Not quite - here's how it works:" : 'Not quite.'}
             </ThemedText>
-            {!!currentStep.teach && (
+            {isPremium && !!currentStep.teach && (
               <MathText
                 content={currentStep.teach}
                 color={brand.textSecondary}
                 style={styles.teachBody}
               />
             )}
-            {!!currentStep.final_expression && (
+            {isPremium && !!currentStep.final_expression && (
               <View style={styles.expressionGap}>
                 <MathText content={currentStep.final_expression} mode="expression" centered />
               </View>
+            )}
+            {!isPremium && (
+              <Pressable
+                style={styles.secondaryButton}
+                onPress={() => {
+                  logAnalyticsEvent('pro_offer_viewed', { source: 'practice_worked_solution' });
+                  void presentPaywall('practice_worked_solution');
+                }}
+              >
+                <ThemedText style={styles.secondaryButtonText}>See worked solution with Pro</ThemedText>
+              </Pressable>
             )}
             {isLastStep && lastStepSummary && (
               <View style={styles.finishBanner}>
@@ -755,7 +797,7 @@ export default function PracticeWalkthroughScreen() {
       </ScrollView>
 
       <ExplanationModal
-        visible={showExplain}
+        visible={showExplain && isPremium}
         onClose={() => setShowExplain(false)}
         questionStem={question.question}
         correctAnswer={question.answer}
@@ -777,6 +819,17 @@ export default function PracticeWalkthroughScreen() {
         visible={showShareModal}
         source="practice"
         onClose={handleShareModalClose}
+      />
+      <FreeLimitModal
+        visible={showLimitModal}
+        limitType="practice"
+        usedToday={getPracticeQuestionsUsedToday(progress)}
+        onDismiss={() => setShowLimitModal(false)}
+        onUpgrade={async () => {
+          setShowLimitModal(false);
+          logAnalyticsEvent('pro_offer_viewed', { source: 'practice_walkthrough_limit' });
+          await presentPaywall('practice_walkthrough_limit');
+        }}
       />
     </View>
   );

@@ -1,5 +1,6 @@
 import { collection, getDocs, query, where, DocumentData } from 'firebase/firestore';
 import { db } from '@/config/firebase';
+import { FREE_ACCOUNTING_LEVEL1_MAX_QUESTIONS } from '@/services/accessPolicy';
 
 export interface AccountingTopic {
   id: number;
@@ -228,7 +229,8 @@ async function findTopicBySubtopicName(subtopicName: string): Promise<Accounting
 
 export async function fetchQuestionsByTopicAndLevel(
   subtopicName: string,
-  levelName: string
+  levelName: string,
+  opts?: { isPro?: boolean }
 ): Promise<AccountingLessonData> {
   const topic = await findTopicBySubtopicName(String(subtopicName));
   if (!topic) {
@@ -252,6 +254,8 @@ export async function fetchQuestionsByTopicAndLevel(
   return {
     topic: topic.sub_topic,
     level: String(levelName),
-    data: isLevelOne(levelName) ? shuffleQuestions(questions) : questions,
+    data: isLevelOne(levelName)
+      ? shuffleQuestions(questions).slice(0, !opts?.isPro ? FREE_ACCOUNTING_LEVEL1_MAX_QUESTIONS : undefined)
+      : questions,
   };
 }

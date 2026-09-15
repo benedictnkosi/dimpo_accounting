@@ -1,0 +1,133 @@
+{
+  "appPolicies": {
+    "eula": "",
+    "policies": [
+      {
+        "locale": "en_US",
+        "policyText": "",
+        "policyURL": ""
+      }
+    ]
+  },
+  "identifier": "DIMPOACCT",
+  "nonRenewingSubscriptions": [],
+  "products": [],
+  "settings": {
+    "_failTransactionsEnabled": false,
+    "_locale": "en_US",
+    "_storefront": "USA",
+    "_storeKitErrors": [
+      {
+        "current": {
+          "index": 2,
+          "type": "generic"
+        },
+        "enabled": false,
+        "name": "Load Products"
+      },
+      {
+        "current": {
+          "index": 1,
+          "type": "purchase"
+        },
+        "enabled": false,
+        "name": "Purchase"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Verification"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "App Store Sync"
+      },
+      {
+        "current": {
+          "index": 2,
+          "type": "generic"
+        },
+        "enabled": false,
+        "name": "Subscription Status"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "App Transaction"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Manage Subscriptions Sheet"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Refund Request Sheet"
+      },
+      {
+        "current": null,
+        "enabled": false,
+        "name": "Offer Code Redeem Sheet"
+      }
+    ]
+  },
+  "subscriptionGroups": [
+    {
+      "id": "DIMPOPRO",
+      "localizations": [],
+      "name": "Accounting CPA Quiz Pro",
+      "subscriptions": [
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "4.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "DIMPOMON",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Unlock all Accounting CPA Quiz levels, unlimited practice, and weak-topic insights.",
+              "displayName": "Accounting CPA Quiz Pro Monthly",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "dimpo_accounting_monthly",
+          "recurringSubscriptionPeriod": "P1M",
+          "referenceName": "Accounting CPA Quiz Monthly",
+          "subscriptionGroupID": "DIMPOPRO",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        },
+        {
+          "adHocOffers": [],
+          "codeOffers": [],
+          "displayPrice": "29.99",
+          "familyShareable": false,
+          "groupNumber": 1,
+          "internalID": "DIMPOANN",
+          "introductoryOffer": null,
+          "localizations": [
+            {
+              "description": "Unlock all Accounting CPA Quiz levels, unlimited practice, and weak-topic insights.",
+              "displayName": "Accounting CPA Quiz Pro Annual",
+              "locale": "en_US"
+            }
+          ],
+          "productID": "dimpo_accounting_annual",
+          "recurringSubscriptionPeriod": "P1Y",
+          "referenceName": "Accounting CPA Quiz Annual",
+          "subscriptionGroupID": "DIMPOPRO",
+          "type": "RecurringSubscription",
+          "winbackOffers": []
+        }
+      ]
+    }
+  ],
+  "version": {
+    "major": 4,
+    "minor": 0
+  }
+}
